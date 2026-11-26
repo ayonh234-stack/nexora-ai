@@ -219,7 +219,8 @@ def system_addon(ctx: Ctx) -> str:
     if ctx.owner:
         st = vbox.available()
         owner += (" Virtual computer is ONLINE." if st.get("online") else
-                  " Virtual computer is OFFLINE right now (it still works in the Telegram bot).")
+                  " Virtual computer may be waking up (up to about a minute) or offline. "
+                  "If a tool is slow, tell the user 'কম্পিউটার চালু হচ্ছে…' and wait. It also works in the Telegram bot.")
     return f"""
 AGENT MODE — you can act, not just talk. Current local time: {now:%Y-%m-%d %H:%M} ({ctx.tz}, {now:%A}).
 Tools: web_search (live web; ALWAYS use it for news, prices, recent events, current facts, anything after 2024 or that you are unsure about —
@@ -597,20 +598,26 @@ def _vbox_result(ctx: Ctx, result: dict) -> dict:
     return result
 
 
+def _vbox_run(ctx: Ctx, op: str, args: dict) -> dict:
+    if not vbox.is_local():
+        ctx.emit({"tool": {"name": "computer", "label": vbox.warming_message(ctx.bn)}})
+    return _vbox_result(ctx, vbox.run(op, args))
+
+
 def _t_python(ctx: Ctx, a: dict) -> dict:
     _need_owner(ctx)
-    return _vbox_result(ctx, vbox.run("python", {"code": a.get("code") or ""}))
+    return _vbox_run(ctx, "python", {"code": a.get("code") or ""})
 
 
 def _t_browse(ctx: Ctx, a: dict) -> dict:
     _need_owner(ctx)
-    return _vbox_result(ctx, vbox.run("browse", {"url": a.get("url") or "", "wait_ms": a.get("wait_ms") or 4000}))
+    return _vbox_run(ctx, "browse", {"url": a.get("url") or "", "wait_ms": a.get("wait_ms") or 4000})
 
 
 def _t_cfile(ctx: Ctx, a: dict) -> dict:
     _need_owner(ctx)
-    return _vbox_result(ctx, vbox.run("file", {"action": a.get("action") or "list", "name": a.get("name") or "",
-                                              "content": a.get("content") or ""}))
+    return _vbox_run(ctx, "file", {"action": a.get("action") or "list", "name": a.get("name") or "",
+                                   "content": a.get("content") or ""})
 
 
 HANDLERS = {"web_search": _t_search, "read_url": _t_read, "find_leads": _t_leads, "create_file": _t_file,
@@ -620,7 +627,7 @@ HANDLERS = {"web_search": _t_search, "read_url": _t_read, "find_leads": _t_leads
             "ig_reply": _t_ig_reply, "ig_hide": _t_ig_hide, "ig_leads": _t_ig_leads, "ig_settings": _t_ig_settings,
             "run_python": _t_python, "browse_page": _t_browse, "computer_file": _t_cfile}
 TIMEOUTS = {"find_leads": 60, "web_search": 40, "read_url": 30, "http_request": 30, "ig_post": 100, "ig_comments": 45, "ig_account": 45,
-            "run_python": 30, "browse_page": 50, "computer_file": 20}
+            "run_python": 90, "browse_page": 110, "computer_file": 80}
 
 
 def run_tool(ctx: Ctx, name: str, args: dict) -> str:

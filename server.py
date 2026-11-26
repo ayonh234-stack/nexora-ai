@@ -357,7 +357,7 @@ class ChatIn(BaseModel):
     agent: dict | None = None
 
 
-APP_VERSION = "21"
+APP_VERSION = "22"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.

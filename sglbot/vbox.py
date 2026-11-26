@@ -106,12 +106,18 @@ def available() -> dict:
         return {"online": False, "where": "remote", "reason": str(exc)[:160]}
 
 
+def warming_message(bn: bool = True) -> str:
+    if bn:
+        return "কম্পিউটার চালু হচ্ছে…"
+    return "Starting the computer…"
+
+
 def offline_message(bn: bool = True) -> str:
     if bn:
-        return ("ভার্চুয়াল কম্পিউটার এখন অফলাইন। টেলিগ্রাম বটে (@SocialGrowthLabAI_bot) এটা কাজ করে, "
-                "কারণ কম্পিউটার সেখানকার সার্ভারে চলে। একটু পরে অ্যাপেও আবার চেষ্টা করুন।")
-    return ("The virtual computer is offline right now. It works in the Telegram bot (@SocialGrowthLabAI_bot) "
-            "because the computer runs on that server. Try again in the app in a moment.")
+        return ("ভার্চুয়াল কম্পিউটার এখন অফলাইন, অথবা জাগতে একটু বেশি সময় নিচ্ছে। "
+                "এক মিনিট পরে আবার চেষ্টা করুন। টেলিগ্রাম বটেও (@SocialGrowthLabAI_bot) এটা কাজ করে।")
+    return ("The virtual computer is offline, or it is taking too long to wake up. "
+            "Try again in a minute. It also works in the Telegram bot (@SocialGrowthLabAI_bot).")
 
 
 def _check_rate() -> str | None:
@@ -365,6 +371,33 @@ def _html_text(html: str, limit: int = 8000) -> str:
         return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
+def _browse_text_only(url: str, note: str, html: str = "", detail: str = "") -> dict:
+    """Fallback when Chromium cannot take a screenshot (common on 512 MB hosts)."""
+    if not html:
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "Mozilla/5.0 NexoraComputer/1", "Accept": "text/html,application/xhtml+xml"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raw = r.read(1_500_000)
+                enc = r.headers.get_content_charset() or "utf-8"
+            html = raw.decode(enc, "replace")
+        except Exception as exc:
+            return {"error": note, "detail": (detail or str(exc))[:400], "url": url, "screenshot": False}
+    text = _html_text(html)
+    out = {
+        "ok": True,
+        "url": url,
+        "title": (text.split("\n", 1)[0] if text else "")[:160],
+        "text": text or "(no readable text)",
+        "screenshot": False,
+        "note": note,
+    }
+    if detail:
+        out["detail"] = detail
+    return out
+
+
 def browse(url: str, wait_ms: int = 4000) -> dict:
     err = _check_rate()
     if err:
@@ -374,7 +407,7 @@ def browse(url: str, wait_ms: int = 4000) -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
     if not Path(CHROME).exists():
-        return {"error": "browser is not installed on this computer"}
+        return _browse_text_only(url, "browser is not installed; text only")
     wait_ms = max(0, min(int(wait_ms or 4000), 15000))
     _ensure()
     with _lock:
@@ -391,16 +424,18 @@ def browse(url: str, wait_ms: int = 4000) -> dict:
                 "--dump-dom",
                 url,
             ]
+            if (os.getenv("NEXORA_VBOX_LOWMEM") or "").strip() == "1":
+                cmd[1:1] = ["--single-process", "--no-zygote", "--js-flags=--max-old-space-size=128"]
             try:
                 proc = subprocess.run(
                     cmd, capture_output=True, timeout=TIMEOUT_BROWSE, text=True, errors="replace",
                 )
             except subprocess.TimeoutExpired:
-                return {"error": f"page load timed out after {TIMEOUT_BROWSE}s", "url": url}
+                return _browse_text_only(url, "page load timed out; text only")
             html = proc.stdout or ""
             if not shot.exists() or shot.stat().st_size < 100:
-                errl = _clean_stderr(proc.stderr or "")[:500]
-                return {"error": "could not capture the page", "detail": errl, "url": url}
+                errl = _clean_stderr(proc.stderr or "")[:400]
+                return _browse_text_only(url, "screenshot unavailable; text only", html=html, detail=errl)
             png = shot.read_bytes()
     jpeg = _jpeg(png)
     name = "screenshot.jpg" if jpeg[:3] == b"\xff\xd8\xff" else "screenshot.png"
@@ -412,6 +447,7 @@ def browse(url: str, wait_ms: int = 4000) -> dict:
         "title": (text.split("\n", 1)[0] if text else "")[:160],
         "text": text or "(no readable text)",
         "bytes": len(jpeg),
+        "screenshot": True,
         "_files": [{"name": name, "mime": mime, "data": jpeg, "size": len(jpeg)}],
     }
 
@@ -489,29 +525,49 @@ def _dispatch(op: str, args: dict) -> dict:
 
 
 def _remote(op: str, args: dict) -> dict:
-    url, token = _remote_url(), _token()
+    url = _remote_url()
+    token = _token()
     if not url or not token:
         return {"error": "offline", "detail": "virtual computer endpoint is not configured"}
     body = json.dumps({"op": op, "args": args}, ensure_ascii=False).encode()
-    req = urllib.request.Request(
-        url + "/v1/run",
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json",
-            "User-Agent": "NexoraAI-VBox/1",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_BROWSE + 25) as r:
-            raw = r.read(8_000_000)
-        payload = json.loads(raw.decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = (exc.read(2000) or b"").decode("utf-8", "ignore")
-        return {"error": f"computer HTTP {exc.code}", "detail": detail[:400]}
-    except Exception as exc:
-        return {"error": "offline", "detail": str(exc)[:200]}
+    deadline = time.time() + int(os.getenv("NEXORA_VBOX_WARM_SEC") or 60)
+    last_err = "offline"
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            req = urllib.request.Request(
+                url + "/v1/run",
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json",
+                    "User-Agent": "NexoraAI-VBox/1",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=TIMEOUT_BROWSE + 25) as r:
+                raw = r.read(8_000_000)
+            text = raw.decode("utf-8", "replace")
+            if text.lstrip()[:1] != "{":
+                last_err = "warming"
+                raise RuntimeError("non-json response (host is waking)")
+            payload = json.loads(text)
+            break
+        except urllib.error.HTTPError as exc:
+            detail = (exc.read(2000) or b"").decode("utf-8", "ignore")
+            if exc.code in (502, 503, 504, 408, 429) and time.time() < deadline:
+                last_err = f"HTTP {exc.code}"
+                time.sleep(min(6, 2 + attempt))
+                continue
+            return {"error": f"computer HTTP {exc.code}", "detail": detail[:400]}
+        except Exception as exc:
+            last_err = str(exc)[:200]
+            if time.time() < deadline:
+                time.sleep(min(6, 2 + attempt))
+                continue
+            return {"error": "offline", "detail": last_err, "warming": True}
+
     # files arrive as base64
     files = []
     for f in payload.get("files") or payload.get("_files") or []:
