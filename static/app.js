@@ -11,10 +11,10 @@
       leadSub: "তথ্য দিন, Md Zahngir Hossain নিজে যোগাযোগ করবেন।", fName: "নাম", fIg: "Instagram handle", fBudget: "বাজেট",
       fContact: "যোগাযোগ (Email / WhatsApp / Telegram)", cancel: "বাতিল", submit: "পাঠান",
       placeholder: { chat: "Nexora-কে কিছু জিজ্ঞেস করুন…", caption: "পোস্টের বিষয়/নিশ লিখুন, ক্যাপশন বানিয়ে দেব…", growth: "আপনার Instagram/TikTok গ্রোথ নিয়ে জিজ্ঞেস করুন…", image: "কীসের ছবি চান? যেমন: নীল পদ্ম, সূর্যাস্তে…", video: "কীসের ভিডিও চান? যেমন: একটি লাল আপেল ঘুরছে" },
-      hint: { chat: "📷 ছবি · 🎤 ভয়েসে বলুন, ভয়েসে উত্তর · বাংলা বা English", caption: "ক্যাপশন, হ্যাশট্যাগ, রিল আইডিয়া", growth: "SocialGrowthLab · অর্গানিক গ্রোথ, কোনো ফেক ফলোয়ার নয়", image: "ফ্রি AI ছবি · ১০–৪০ সেকেন্ড লাগতে পারে", video: "ফ্রি ২ সেকেন্ডের ক্লিপ · দিনে সীমিত · ২০–৯০ সেকেন্ড" },
+      hint: { chat: "📷 ছবি পাঠান + লিখুন “ব্যাকগ্রাউন্ড বদলাও…” · 🎤 ভয়েসে বলুন, ভয়েসে উত্তর · বাংলা বা English", caption: "ক্যাপশন, হ্যাশট্যাগ, রিল আইডিয়া", growth: "SocialGrowthLab · অর্গানিক গ্রোথ, কোনো ফেক ফলোয়ার নয়", image: "ফ্রি AI ছবি · ১০–৪০ সেকেন্ড লাগতে পারে", video: "ফ্রি ২ সেকেন্ডের ক্লিপ · দিনে সীমিত · ২০–৯০ সেকেন্ড" },
       welcomeTitle: "আমি Nexora AI", welcomeSub: "ব্যবসা, মার্কেটিং, কনটেন্ট, রিসার্চ আর দৈনন্দিন কাজে আপনার অল-ইন-ওয়ান AI সহকারী।",
       leadBtn: "📝 ফ্রি কনসালটেশন ফর্ম", copied: "কপি হয়েছে", copy: "কপি", del: "মুছুন", download: "ডাউনলোড",
-      imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", photoQ: "এই ছবিটা নিয়ে কী জানতে চান? (ঐচ্ছিক)",
+      imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", photoQ: "ছবি নিয়ে প্রশ্ন, বা এডিট: যেমন “ব্যাকগ্রাউন্ড বদলে সমুদ্র সৈকত করো”",
       leadThanks: "ধন্যবাদ! আপনার তথ্য পৌঁছে গেছে, Md Zahngir Hossain শিগগিরই যোগাযোগ করবেন।", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।",
       confirmClear: "সব চ্যাট ইতিহাস মুছে ফেলবেন?", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", offline: "আপনি অফলাইনে আছেন",
       modes: { chat: "চ্যাট", caption: "কনটেন্ট", growth: "গ্রোথ", image: "ছবি", video: "ভিডিও" },
@@ -24,10 +24,10 @@
       leadSub: "Share your details and Md Zahngir Hossain will reach out personally.", fName: "Name", fIg: "Instagram handle", fBudget: "Budget",
       fContact: "Contact (Email / WhatsApp / Telegram)", cancel: "Cancel", submit: "Send",
       placeholder: { chat: "Ask Nexora anything…", caption: "Describe your post or niche for captions…", growth: "Ask about growing your Instagram/TikTok…", image: "Describe an image, e.g. a blue lotus at sunset", video: "Describe a clip, e.g. a red apple spinning" },
-      hint: { chat: "📷 photo · 🎤 speak and get a voice reply · Bengali or English", caption: "Captions, hashtags, reel ideas", growth: "SocialGrowthLab · organic growth, no fake followers", image: "Free AI images · may take 10–40s", video: "Free 2-second clips · daily limit · 20–90s" },
+      hint: { chat: "📷 photo + “change background to…” · 🎤 speak and get a voice reply · Bengali or English", caption: "Captions, hashtags, reel ideas", growth: "SocialGrowthLab · organic growth, no fake followers", image: "Free AI images · may take 10–40s", video: "Free 2-second clips · daily limit · 20–90s" },
       welcomeTitle: "I'm Nexora AI", welcomeSub: "Your all-in-one AI assistant for business, marketing, content, research and everyday life.",
       leadBtn: "📝 Free consultation form", copied: "Copied", copy: "Copy", del: "Delete", download: "Download",
-      imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", photoQ: "What do you want to know about this photo? (optional)",
+      imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", photoQ: "Ask about the photo, or edit it: e.g. “change the background to a beach”",
       leadThanks: "Thank you! Your details were sent — Md Zahngir Hossain will contact you soon.", netErr: "Network problem, please try again.",
       confirmClear: "Delete all chat history?", untitled: "New chat", noHistory: "No chats yet", offline: "You are offline",
       modes: { chat: "Chat", caption: "Content", growth: "Growth", image: "Image", video: "Video" },
@@ -53,8 +53,8 @@
   let deferredInstall = null;
   const audioCache = new Map(); // message id -> data: URL (kept in memory only, never in localStorage)
   const VT = {
-    bn: { listen: "শুনুন", rec: "রেকর্ড হচ্ছে… থামাতে আবার 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।", voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…" },
-    en: { listen: "Listen", rec: "Recording… tap 🎤 again to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.", voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…" },
+    bn: { busy: "ফ্রি ছবি-সার্ভার ব্যস্ত, {s} সেকেন্ড পরে আবার চেষ্টা করছি…", altServer: "বিকল্প ফ্রি সার্ভারে চেষ্টা করছি…", allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।", editing: "ছবি এডিট হচ্ছে (২০–৬০ সেকেন্ড)…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…", bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।", listen: "শুনুন", rec: "রেকর্ড হচ্ছে… থামাতে আবার 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।", voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…" },
+    en: { busy: "Free image server is busy, retrying in {s}s…", altServer: "Trying a backup free server…", allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.", editing: "Editing your photo (20–60s)…", bgMaking: "Creating the new background…", bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.", listen: "Listen", rec: "Recording… tap 🎤 again to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.", voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…" },
   };
   function vt(k) { return (VT[lang] || VT.bn)[k]; }
 
@@ -185,7 +185,8 @@
       return;
     }
     if (m.type === "image" && m.url) {
-      b.innerHTML = `<img class="gen" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer" onerror="if(!this.dataset.r){this.dataset.r=1;setTimeout(()=>{this.src=this.src+'&r=1'},3000)}"><div class="media-actions"><a href="${esc(url(m.url))}" download="nexora.jpg" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">🎨 ${esc(m.prompt)}</div>` : ""}`;
+      b.innerHTML = `<img class="gen" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer" onerror="if(!this.dataset.r){this.dataset.r=1;setTimeout(()=>{this.src=this.src+'&r=1'},3000)}"><div class="media-actions"><a href="${esc(url(m.url))}" download="${esc(m.fname || "nexora.jpg")}" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">${m.fname ? "✅" : "🎨"} ${esc(m.prompt)}</div>` : ""}`;
+      if (m.fname && m.fname.endsWith(".png")) b.querySelector("img.gen").classList.add("checker");
       return;
     }
     if (m.type === "video" && m.url) {
@@ -300,15 +301,72 @@
       bot.m.pending = false; bot.m.error = true; bot.m.content = e.message || t("netErr"); refresh(bot);
     }
   }
+  // Fetch a free Pollinations image from the visitor's browser and make sure it is a real image:
+  // when the visitor is rate-limited Pollinations answers 402/429/503 with a "Free limit reached"
+  // placeholder picture, which must never be shown as the result.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function blobToDataURL(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
+  async function fetchRealImage(u, onWait, tries = 3) {
+    for (let i = 0; i < tries; i++) {
+      let wait = 8 + i * 6;
+      try {
+        const res = await fetch(u + (i ? `&r=${i}` : ""), { mode: "cors", referrerPolicy: "no-referrer", cache: "no-store" });
+        const ct = res.headers.get("content-type") || "";
+        if (res.ok && ct.startsWith("image/")) {
+          const b = await res.blob();
+          if (b.size > 2000) return await blobToDataURL(b);
+        }
+        const ra = parseFloat(res.headers.get("retry-after") || ""); if (ra > 0) wait = Math.min(20, ra + 1);
+      } catch (e) { /* network/CORS error: retry */ }
+      if (i < tries - 1) {
+        for (let left = Math.round(wait); left > 0; left--) { onWait && onWait(vt("busy").replace("{s}", left)); await sleep(1000); }
+      }
+    }
+    return null;
+  }
+  async function serverFallbackImage(prompt, w, h, onWait) {
+    onWait && onWait(vt("altServer"));
+    try {
+      const res = await api("/api/image/fallback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, width: w || 1024, height: h || 1024 }) });
+      if (!res.ok) return null;
+      const j = await res.json(); return j.url || null;
+    } catch { return null; }
+  }
+  function setProgress(ref, text) { ref.m.progress = text; const p = ref.el.querySelector(".progress"); if (p) p.textContent = text; else refresh(ref); }
   async function genImage(prompt, ref) {
     ref = ref || push({ role: "assistant", content: "", pending: true, progress: t("imgWait") });
     try {
       const res = await api("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
       if (!res.ok) throw new Error(await errText(res));
       const j = await res.json();
-      Object.assign(ref.m, { pending: false, type: "image", url: j.url, prompt: j.prompt, content: "", progress: "" });
-    } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr") }); }
+      let src = j.url;
+      if (j.source === "pollinations-direct") {
+        const onWait = (txt) => setProgress(ref, txt);
+        src = await fetchRealImage(j.url, onWait);
+        if (!src) src = await serverFallbackImage(j.prompt || prompt, 1024, 1024, onWait);
+        if (!src) throw new Error(vt("allBusy"));
+      }
+      Object.assign(ref.m, { pending: false, type: "image", url: src, prompt: j.prompt, content: "", progress: "" });
+    } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     refresh(ref);
+  }
+  // Put the transparent cutout onto a background on a canvas (cover-fit). bg may be null -> gradient.
+  function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+  async function compositeCutout(cutoutUrl, bgUrl) {
+    const fg = await loadImg(cutoutUrl);
+    const cv = document.createElement("canvas"); cv.width = fg.naturalWidth; cv.height = fg.naturalHeight;
+    const g = cv.getContext("2d");
+    if (bgUrl) {
+      const bg = await loadImg(bgUrl);
+      const s = Math.max(cv.width / bg.naturalWidth, cv.height / bg.naturalHeight);
+      const w = bg.naturalWidth * s, h = bg.naturalHeight * s;
+      g.drawImage(bg, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
+    } else {
+      const gr = g.createLinearGradient(0, 0, 0, cv.height); gr.addColorStop(0, "#6366f1"); gr.addColorStop(1, "#ec4899");
+      g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height);
+    }
+    g.drawImage(fg, 0, 0);
+    return cv.toDataURL("image/jpeg", 0.9);
   }
   async function genVideo(prompt, ref) {
     ref = ref || push({ role: "assistant", content: "", pending: true, progress: t("vidWait") });
@@ -327,9 +385,25 @@
     const bot = push({ role: "assistant", content: "", pending: true });
     try {
       const fd = new FormData(); fd.append("file", file, file.name || "photo.jpg"); fd.append("question", question || "");
+      bot.m.progress = question ? vt("editing") : ""; refresh(bot);
       const res = await api("/api/vision", { method: "POST", body: fd });
       if (!res.ok) throw new Error(await errText(res));
-      const j = await res.json(); bot.m.content = j.reply;
+      const j = await res.json();
+      if (j.edit) {
+        let img = j.image, note = j.reply || "";
+        if (j.op === "replace_bg") {
+          const onWait = (txt) => setProgress(bot, txt);
+          setProgress(bot, vt("bgMaking"));
+          let bg = await fetchRealImage(j.bg_url, onWait, 2);
+          if (!bg) bg = await serverFallbackImage(j.bg_prompt, 1024, Math.round(1024 * (j.height || 1) / (j.width || 1)), onWait);
+          if (!bg) note = "✅ " + vt("bgFallback");
+          img = await compositeCutout(j.cutout, bg);
+        }
+        Object.assign(bot.m, { pending: false, type: "image", url: img, prompt: note.replace(/^✅\s*/, ""), content: "", progress: "",
+          fname: j.op === "remove_bg" ? "nexora-no-background.png" : "nexora-edit.jpg" });
+        bot.m.pending = false; refresh(bot); return;
+      }
+      bot.m.content = j.reply;
     } catch (e) { bot.m.error = true; bot.m.content = e.message || t("netErr"); }
     bot.m.pending = false; refresh(bot);
   }
@@ -429,6 +503,13 @@
     } finally { busy = false; els.send.disabled = false; els.mic.disabled = false; save(); }
   }
   els.mic.onclick = () => { if (rec) stopRec(); else if (!busy) startRec(); };
+
+  // Android WebView can't download data: URLs itself; hand them to the app.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest("a[download]");
+    if (!a || !a.href.startsWith("data:") || !(window.NexoraAndroid && NexoraAndroid.saveFile)) return;
+    e.preventDefault(); NexoraAndroid.saveFile(a.href, a.getAttribute("download") || "nexora");
+  }, true);
 
   // ------------------------------------------------ photo
   function shrink(file) {

@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import ai, media, prompts, voice
+from sglbot import ai, media, photoedit, prompts, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -83,6 +83,8 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "lead": [(5, 60), (30, 86400)],
     "voice": [(10, 60), (120, 86400)],
     "tts": [(15, 60), (200, 86400)],
+    "edit": [(4, 60), (40, 86400)],
+    "imgfb": [(4, 60), (40, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _rl_lock = threading.Lock()
@@ -90,7 +92,7 @@ _rl_lock = threading.Lock()
 
 PROXY_HOPS = max(1, int(os.getenv("TRUST_PROXY_HOPS", "1") or 1))
 # Whole-server daily caps (all visitors together) to protect the free quotas.
-_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000}
+_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000, "edit": 300, "imgfb": 300}
 
 
 def client_ip(request: Request) -> str:
@@ -418,13 +420,20 @@ async def vision(request: Request, file: UploadFile = File(...), question: str =
         raise HTTPException(400, "empty file")
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(413, "ছবি ৮MB-এর কম হতে হবে / Image must be under 8 MB")
+    # Photo + edit request ("change the background to a beach", "ব্যাকগ্রাউন্ড সরাও") -> real editing tools.
+    if question.strip():
+        plan = await asyncio.to_thread(photoedit.plan_edit, GEMINI_KEY, AI_MODEL, question.strip()[:1500])
+        if plan.op != "none":
+            check_rate(request, "edit")
+            return await _photo_edit(data, plan, question.strip())
     q = question.strip() or (
         "এই ছবিটি পরিষ্কার করে বর্ণনা করুন। কোনো লেখা থাকলে তা লিখে দিন। "
         "Describe this image clearly. Transcribe any visible text. Reply in the user's language (Bengali if unclear)."
     )
     try:
         reply = await asyncio.to_thread(
-            media.understand_image, GEMINI_KEY, AI_MODEL, data, file.content_type or "image/jpeg", q[:2000]
+            media.understand_image, GEMINI_KEY, AI_MODEL, data, file.content_type or "image/jpeg",
+            q[:2000] + "\n\n(System note: you can only look at this photo. Never claim you edited, changed or generated an image.)"
         )
     except Exception:
         logger.exception("vision failed")
@@ -523,6 +532,67 @@ async def tts(body: TtsIn, request: Request):
     if not audio:
         raise HTTPException(502, "দুঃখিত, এখন ভয়েস তৈরি করা গেল না। / Sorry, couldn't create the voice right now.")
     return {"audio": audio}
+
+
+async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
+    bn = media.has_bengali(request_text)
+    try:
+        if plan.op == "remove_bg":
+            png, src = await asyncio.to_thread(photoedit.remove_background, data)
+            return {"edit": True, "op": "remove_bg", "image": photoedit.data_url(png, "image/png"), "source": src,
+                    "reply": "✅ ব্যাকগ্রাউন্ড সরানো হয়েছে (স্বচ্ছ PNG)।" if bn else "✅ Background removed (transparent PNG)."}
+        if plan.op == "replace_bg":
+            png, src = await asyncio.to_thread(photoedit.remove_background, data)
+            from PIL import Image
+            import io as _io
+            w, h = Image.open(_io.BytesIO(png)).size
+            scale = 1024 / max(w, h)
+            bw, bh = max(256, int(w * scale) // 32 * 32), max(256, int(h * scale) // 32 * 32)
+            bg_prompt = photoedit.background_prompt(plan.background)
+            # The browser fetches the free Pollinations background (Vercel's IPs are refused), checks it
+            # is a real image (not the rate-limit placeholder), and composites it on a canvas.
+            return {"edit": True, "op": "replace_bg", "cutout": photoedit.data_url(png, "image/png"), "source": src,
+                    "bg_prompt": bg_prompt, "bg_url": photoedit.pollinations_url(bg_prompt, bw, bh),
+                    "width": w, "height": h, "background": plan.background,
+                    "reply": (f"✅ নতুন ব্যাকগ্রাউন্ড: {plan.background}" if bn else f"✅ New background: {plan.background}")}
+        out, src = await asyncio.wait_for(
+            asyncio.to_thread(photoedit.instruct_edit, data, plan.instruction or request_text), timeout=VIDEO_TIMEOUT
+        )
+        return {"edit": True, "op": "edit", "image": photoedit.data_url(out, "image/jpeg"), "source": src,
+                "reply": "✅ " + (plan.instruction or request_text)}
+    except (photoedit.EditError, asyncio.TimeoutError) as exc:
+        logger.warning("photo edit failed: %s", exc)
+        if plan.op == "edit":
+            msg = ("দুঃখিত, এই ধরনের এডিটের ফ্রি সার্ভার এখন ব্যস্ত বা আজকের ফ্রি সীমা শেষ, তাই ছবিটা বদলানো হয়নি। "
+                   "ব্যাকগ্রাউন্ড বদলানো বা সরানো এখনো কাজ করবে, অথবা কিছুক্ষণ পরে আবার চেষ্টা করুন।"
+                   if bn else "Sorry, the free server for this kind of edit is busy or out of today's free quota, so the photo was NOT changed. "
+                   "Background change/removal still works, or try again later.")
+        else:
+            msg = ("দুঃখিত, ফ্রি ব্যাকগ্রাউন্ড-রিমুভ সার্ভার এখন সাড়া দিচ্ছে না, তাই ছবিটা বদলানো হয়নি। একটু পরে আবার চেষ্টা করুন।"
+                   if bn else "Sorry, the free background-removal server isn't responding, so the photo was NOT changed. Please try again shortly.")
+        raise HTTPException(503, msg)
+    except Exception:
+        logger.exception("photo edit crashed")
+        raise HTTPException(502, "দুঃখিত, ছবি এডিট করা গেল না। / Sorry, the photo edit failed — please try again.")
+
+
+class FallbackImageIn(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=1500)
+    width: int = Field(1024, ge=256, le=1280)
+    height: int = Field(1024, ge=256, le=1280)
+
+
+@app.post("/api/image/fallback")
+async def image_fallback(body: FallbackImageIn, request: Request):
+    """Used by the browser when Pollinations is rate-limited for the visitor: free FLUX.1-schnell Space."""
+    check_rate(request, "imgfb")
+    got = await asyncio.to_thread(
+        photoedit.generate_image_free, body.prompt, body.width, body.height, not IMAGE_CLIENT_SIDE
+    )
+    if not got:
+        raise HTTPException(503, "ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, কয়েক সেকেন্ড পরে আবার চেষ্টা করুন। / "
+                                 "The free image servers are busy right now — please try again in a few seconds.")
+    return {"url": photoedit.data_url(got[0], "image/jpeg"), "source": got[1]}
 
 
 class LeadIn(BaseModel):

@@ -236,7 +236,15 @@ def generate_image(api_key: str, prompt: str) -> ImageResult:
         if result:
             return result
         logger.info("Gemini image generation unavailable; using Pollinations fallback")
-    return _pollinations_image(prompt)
+    # Pollinations (honours its rate-limit Retry-After, never keeps the "free limit" placeholder),
+    # then the free FLUX.1-schnell Hugging Face Space.
+    from sglbot import photoedit
+
+    got = photoedit.generate_image_free(prompt, 1024, 1024)
+    if got:
+        data, source = got
+        return ImageResult(data, "image/jpeg", source, "nexora.jpg")
+    raise RuntimeError("all free image generators are busy")
 
 
 def understand_image(

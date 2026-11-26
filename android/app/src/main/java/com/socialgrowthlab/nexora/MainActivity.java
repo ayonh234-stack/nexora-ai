@@ -6,7 +6,14 @@ import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ContentValues;
 import android.content.SharedPreferences;
+import android.os.Build;
+import android.provider.MediaStore;
+import android.util.Base64;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import android.content.pm.PackageManager;
 import android.Manifest;
 import android.graphics.Bitmap;
@@ -58,7 +65,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
-        s.setUserAgentString(s.getUserAgentString() + " NexoraApp/1.1");
+        s.setUserAgentString(s.getUserAgentString() + " NexoraApp/1.2");
         CookieManager.getInstance().setAcceptCookie(true);
 
         web.addJavascriptInterface(new Bridge(), "NexoraAndroid");
@@ -88,7 +95,48 @@ public class MainActivity extends Activity {
         web.loadUrl(u);
     }
 
+    /** Save a data: URL (edited photos, inline videos) into Downloads/Nexora. */
+    private void saveDataUrl(String dataUrl, String filename) {
+        try {
+            int comma = dataUrl.indexOf(',');
+            if (!dataUrl.startsWith("data:") || comma < 0 || dataUrl.length() > 40_000_000) return;
+            String meta = dataUrl.substring(5, comma);
+            String mime = meta.split(";")[0];
+            if (mime.isEmpty()) mime = "application/octet-stream";
+            byte[] bytes = meta.contains("base64")
+                    ? Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT)
+                    : Uri.decode(dataUrl.substring(comma + 1)).getBytes("UTF-8");
+            String name = (filename == null || filename.trim().isEmpty()) ? "nexora" : filename.replaceAll("[^A-Za-z0-9._-]", "_");
+            if (!name.contains(".")) {
+                String ext = mime.contains("png") ? ".png" : mime.contains("mp4") ? ".mp4" : mime.contains("mpeg") ? ".mp3" : ".jpg";
+                name += ext;
+            }
+            name = System.currentTimeMillis() / 1000 + "-" + name;
+            String where;
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+                v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Nexora");
+                Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new Exception("insert failed");
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) { os.write(bytes); }
+                where = "Download/Nexora";
+            } else {
+                File dir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                File f = new File(dir, name);
+                try (FileOutputStream os = new FileOutputStream(f)) { os.write(bytes); }
+                where = f.getAbsolutePath();
+            }
+            final String msg = "Saved / সেভ হয়েছে: " + where;
+            runOnUiThread(() -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show());
+        } catch (Exception e) {
+            runOnUiThread(() -> Toast.makeText(this, "Save failed / সেভ হয়নি", Toast.LENGTH_SHORT).show());
+        }
+    }
+
     private void download(String url, String contentDisposition, String mime) {
+        if (url != null && url.startsWith("data:")) { saveDataUrl(url, URLUtil.guessFileName("nexora", contentDisposition, mime)); return; }
         try {
             DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url));
             String name = URLUtil.guessFileName(url, contentDisposition, mime);
@@ -119,6 +167,11 @@ public class MainActivity extends Activity {
             prefs().edit().putString(KEY_URL, u).apply();
             final String fu = u;
             runOnUiThread(() -> { web.clearHistory(); if (fu.isEmpty()) web.loadUrl(SETUP); else loadApp(); });
+        }
+
+        @JavascriptInterface public void saveFile(String dataUrl, String filename) {
+            if (onLocalPage) return;
+            new Thread(() -> saveDataUrl(dataUrl, filename)).start();
         }
 
         @JavascriptInterface public void retry() { runOnUiThread(MainActivity.this::loadApp); }

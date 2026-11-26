@@ -47,3 +47,12 @@ The web app never polls Telegram. `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID` are onl
   (`bn-BD-NabanitaNeural` for Bengali, `en-US-AvaNeural` for English).
 - `POST /api/tts {text}` powers the 🔊 Listen button under any reply. Audio is kept in memory only, never in localStorage.
 - Android 1.1.0 asks for the microphone permission and only grants it to the configured Nexora server.
+
+## Photo editing & image reliability (v1.2)
+- Send a photo with an edit request ("change the background to a beach", "ব্যাকগ্রাউন্ড সরাও", "make it cartoon").
+  Gemini routes the request (`photoedit.plan_edit`) to: background removal (free HF Spaces BiRefNet / BRIA RMBG /
+  rembg-on-CPU, local `rembg` on the bot box), background replacement (cutout + new background, composited in the
+  browser on Vercel or with Pillow in the bot), or instruction edits (free FLUX.1-Kontext Space, small daily quota).
+- Pollinations rate-limit placeholders (402/429/503 + "Free limit reached" image) are detected; the app waits for
+  Retry-After, retries, then falls back to `POST /api/image/fallback` (free FLUX.1-schnell Space).
+- Android 1.2.0 saves edited images (data: URLs) to Download/Nexora.
