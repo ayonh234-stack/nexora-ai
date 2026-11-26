@@ -46,6 +46,9 @@ ON_VERCEL = bool(os.getenv("VERCEL"))
 DATA_DIR = Path(os.getenv("DATA_DIR") or ("/tmp/nexora-data" if ON_VERCEL else ROOT / "data"))
 # Return generated media inline (data: URL) when files can't be served back reliably (serverless).
 MEDIA_INLINE = (os.getenv("MEDIA_INLINE") or ("1" if ON_VERCEL else "0")) == "1"
+# Pollinations refuses anonymous requests from cloud/datacenter IPs (HTTP 402), so on serverless
+# hosts the browser loads the free image URL directly instead of the server downloading it.
+IMAGE_CLIENT_SIDE = (os.getenv("IMAGE_CLIENT_SIDE") or ("1" if ON_VERCEL else "0")) == "1"
 VIDEO_TIMEOUT = int(os.getenv("VIDEO_TIMEOUT") or (110 if ON_VERCEL else 180))
 MEDIA_DIR = DATA_DIR / "media"
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
@@ -152,6 +155,14 @@ def clean_history(history: list[dict] | None) -> list[dict[str, str]]:
         if role in ("user", "assistant") and content.strip():
             out.append({"role": role, "content": content})
     return out
+
+
+def language_hint(text: str) -> str:
+    if media.has_bengali(text):
+        return "The user's latest message is in Bengali, so reply in Bengali."
+    if re.search(r"[A-Za-z]{3,}", text or ""):
+        return "The user's latest message is in English, so reply in English only (no Bengali)."
+    return ""
 
 
 def system_prompt(mode: str, lead: dict | None = None) -> str:
@@ -296,13 +307,14 @@ async def chat(body: ChatIn, request: Request):
         return JSONResponse({"action": "video", "prompt": text})
 
     history = clean_history(body.history)
+    hint = language_hint(text)
 
     if mode == "growth":
         s = session_lead(body.session_id)
         try:
             reply = await asyncio.to_thread(
                 ai.complete, client, CFG,
-                system_prompt=system_prompt("growth", s["lead"]),
+                system_prompt=system_prompt("growth", s["lead"]) + "\n" + hint,
                 history=history, user_message=text,
                 tools=ai.growth_tools(), on_tool=make_lead_tool(body.session_id),
             )
@@ -311,12 +323,12 @@ async def chat(body: ChatIn, request: Request):
             reply = friendly_ai_error()
         return JSONResponse({"reply": reply or friendly_ai_error(), "lead": s["lead"], "lead_saved": s["submitted"]})
 
-    messages = [{"role": "system", "content": system_prompt(mode)}, *history, {"role": "user", "content": text}]
+    messages = [{"role": "system", "content": system_prompt(mode) + "\n" + hint}, *history, {"role": "user", "content": text}]
 
     if not body.stream:
         try:
             reply = await asyncio.to_thread(
-                ai.complete, client, CFG, system_prompt=system_prompt(mode), history=history, user_message=text
+                ai.complete, client, CFG, system_prompt=system_prompt(mode) + "\n" + hint, history=history, user_message=text
             )
         except Exception:
             logger.exception("chat failed")
@@ -360,6 +372,12 @@ async def image(body: MediaIn, request: Request):
     prompt = media.extract_image_prompt(body.prompt) or body.prompt.strip()
     if not prompt:
         raise HTTPException(400, "empty prompt")
+    if IMAGE_CLIENT_SIDE:
+        import random
+        q = urllib.parse.quote(prompt[:800], safe="")
+        seed = random.randint(1, 2_000_000_000)
+        url = f"{media.POLLINATIONS_BASE}{q}?width=1024&height=1024&nologo=true&seed={seed}"
+        return {"url": url, "source": "pollinations-direct", "prompt": prompt}
     try:
         res = await asyncio.to_thread(media.generate_image, GEMINI_KEY, prompt)
     except Exception:

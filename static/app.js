@@ -174,7 +174,7 @@
       return;
     }
     if (m.type === "image" && m.url) {
-      b.innerHTML = `<img class="gen" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" loading="lazy"><div class="media-actions"><a href="${esc(url(m.url))}" download="nexora.jpg" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">🎨 ${esc(m.prompt)}</div>` : ""}`;
+      b.innerHTML = `<img class="gen" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer" onerror="if(!this.dataset.r){this.dataset.r=1;setTimeout(()=>{this.src=this.src+'&r=1'},3000)}"><div class="media-actions"><a href="${esc(url(m.url))}" download="nexora.jpg" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">🎨 ${esc(m.prompt)}</div>` : ""}`;
       return;
     }
     if (m.type === "video" && m.url) {
