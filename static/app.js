@@ -86,6 +86,12 @@
     igTip: "চ্যাটে বলুন: “প্রতিদিন রাত ৮টায় পোস্ট দিও”, “নতুন কমেন্ট দেখাও”, “Instagram ইনসাইট দাও”। অনুমোদনের বাটন Telegram-এ আসবে।",
     vBurned: "এই PIN আগে ফাঁস হয়ে গেছে। নতুন PIN সেট করুন।", vNeedSetup: "আগে Telegram-এ কোড নিয়ে PIN সেট করুন।", vBurnedChange: "ভোল্ট খুলেছে। এই PIN ফাঁস হয়েছিল — এখনই নতুন PIN সেট করুন।",
     vAdd: "নতুন যোগ করুন", vName: "নাম", vValue: "মান (পাসওয়ার্ড / API key)", vNote: "নোট (ঐচ্ছিক)", vLock: "লক", vDone: "ঠিক আছে", vDelQ: "মুছে ফেলবেন",
+      agents: "এজেন্ট", newAgent: "নতুন এজেন্ট", editAgent: "এজেন্ট সম্পাদনা", agentInstr: "নির্দেশনা (এই এজেন্ট কীভাবে কাজ করবে)",
+      agentHello: "এই এজেন্টকে বলুন কী করতে হবে।", agentSub: "প্রস্তুত এজেন্ট বেছে নিন, অথবা নিজেরটা বানান।",
+      toolWeb: "ওয়েব সার্চ", toolImage: "ছবি", toolVideo: "ভিডিও", toolFiles: "ফাইল",
+      toolLeads: "লিড খোঁজা", toolRemind: "রিমাইন্ডার", toolComputer: "ভার্চুয়াল কম্পিউটার",
+      agentSave: "সেভ করুন", agentOwnerHint: "ভার্চুয়াল কম্পিউটার শুধু মালিকের জন্য — আগে ভোল্ট খুলুন।",
+
   });
   Object.assign(T.en, {
     stepsDone: "steps done", fileGone: "file no longer stored — ask again to recreate it", docReading: "Reading file…", docBig: "File too large (max 4 MB)",
@@ -107,6 +113,12 @@
     igAutoReply: "Auto-reply (safe templates)", igAutoSpam: "Auto-hide spam comments", igDisconnect: "Disconnect",
     igTip: "Ask in chat: “post daily at 8pm”, “show new comments”, “Instagram insights”. Approval buttons arrive in Telegram.",
     vAdd: "Add new", vName: "Name", vValue: "Value (password / API key)", vNote: "Note (optional)", vLock: "Lock", vDone: "Done", vDelQ: "Delete",
+      agents: "Agents", newAgent: "New agent", editAgent: "Edit agent", agentInstr: "Instructions (how this agent should work)",
+      agentHello: "Tell this agent what to do.", agentSub: "Pick a ready-made agent, or create your own.",
+      toolWeb: "Web search", toolImage: "Images", toolVideo: "Video", toolFiles: "Files",
+      toolLeads: "Lead finder", toolRemind: "Reminders", toolComputer: "Virtual computer",
+      agentSave: "Save", agentOwnerHint: "The virtual computer is owner-only — unlock the vault first.",
+
   });
   let lang = localStorage.getItem(LS_LANG) || "bn";
   const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -165,7 +177,7 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "20";
+  const CLIENT_VERSION = "21";
   const BURNED_PIN = "521901";
   function normalizeDigits(text) {
     const map = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
@@ -210,7 +222,7 @@
     $("#langLabel").textContent = lang === "bn" ? "English" : "বাংলা";
     els.search.placeholder = t("search"); $("#disclaimer").textContent = t("disclaimer");
     if (!pendingPhoto) els.input.placeholder = t("placeholder");
-    renderHistory(); if (!chat().messages.length) renderThread();
+    renderHistory(); renderAgents(); if (!chat().messages.length) renderThread(); else setTopTitle();
   }
   function setTheme(th) { document.documentElement.dataset.theme = th; localStorage.setItem(LS_THEME, th); document.querySelector('meta[name="theme-color"]').content = th === "light" ? "#ffffff" : "#212121"; }
 
@@ -250,12 +262,25 @@
     inp.onkeydown = (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
     inp.onblur = () => done(true);
   }
-  function newChat() { current = null; chat(); renderThread(); renderHistory(); closeSide(); clearPhoto(); els.input.focus({ preventScroll: true }); }
+  function newChat(agent) {
+    current = null;
+    const c = chat();
+    if (agent) {
+      c.agentId = agent.id;
+      c.agent = agent.custom ? { id: agent.id, emoji: agent.emoji, name_bn: agent.name_bn, name_en: agent.name_en, name: agent.name, instructions: agent.instructions, tools: agent.tools } : null;
+      c.title = ((agent.emoji || "") + " " + agName(agent)).trim();
+      c.renamed = true;
+    }
+    renderThread(); renderHistory(); renderAgents(); closeSide(); clearPhoto(); els.input.focus({ preventScroll: true });
+  }
 
   // ------------------------------------------------ thread rendering
   function renderEmpty() {
     const w = document.createElement("div"); w.className = "empty";
-    w.innerHTML = `<img class="logo" src="/icons/icon.svg" alt=""><h2>${esc(t("hello"))}</h2><p>${esc(t("helloSub"))}</p><div class="chips"></div>`;
+    const ag = currentAgent();
+    const hello = ag ? `${ag.emoji || ""} ${agName(ag)}` : t("hello");
+    const sub = ag ? (ag.blurb || t("agentHello")) : t("helloSub");
+    w.innerHTML = `<img class="logo" src="/icons/icon.svg" alt=""><h2>${esc(hello)}</h2><p>${esc(sub)}</p><div class="chips"></div>`;
     t("chips").forEach(([title, text]) => {
       const b = document.createElement("button"); b.className = "chip"; b.type = "button";
       b.innerHTML = `<b>${esc(title)}</b><span>${esc(text)}</span>`;
@@ -267,6 +292,7 @@
   function renderThread(toBottom) {
     els.thread.innerHTML = "";
     const c = chat();
+    setTopTitle();
     if (!c.messages.length) renderEmpty();
     c.messages.forEach((m) => { const e = msgEl(m); e.classList.add("still"); els.thread.appendChild(e); });
     if (toBottom !== false) scrollEnd(true);
@@ -407,7 +433,8 @@
       try {
         const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true,
-            attachments: (docs || []).map((d) => ({ name: d.name, text: d.text || "" })) }) });
+            attachments: (docs || []).map((d) => ({ name: d.name, text: d.text || "" })),
+            agent_id: c.agentId || "", agent: c.agent || null }) });
         if (!res.ok) throw new Error(await errText(res));
         const ct = res.headers.get("content-type") || "";
         if (ct.includes("application/json")) {
@@ -915,6 +942,16 @@
     const wrap = document.createElement("div"); wrap.className = "files";
     m.files.forEach((f) => {
       const ext = (f.name.split(".").pop() || "").toLowerCase();
+      const isImg = ((f.mime || "").startsWith("image/") || /^(png|jpe?g|gif|webp)$/i.test(ext)) && f.data;
+      if (isImg) {
+        const fig = document.createElement("figure"); fig.className = "shot";
+        const src = "data:" + (f.mime || "image/jpeg") + ";base64," + f.data;
+        fig.innerHTML = `<img class="gen shot-img" alt="${esc(f.name)}" /><figcaption><button type="button" class="file-card">${ICON.down}<span class="fn"><b>${esc(f.name)}</b></span></button></figcaption>`;
+        fig.querySelector("img").src = src;
+        fig.querySelector("button").onclick = () => saveFileObj(fileFromItem(f));
+        wrap.appendChild(fig);
+        return;
+      }
       const card = document.createElement("button"); card.type = "button"; card.className = "file-card";
       const kb = f.size ? (f.size > 1048576 ? (f.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(f.size / 1024)) + " KB") : "";
       card.innerHTML = `<span class="fi">${FILE_ICON[ext] || "📎"}</span><span class="fn"><b>${esc(f.name)}</b><small>${esc(ext.toUpperCase())}${kb ? " · " + kb : ""}${f.data ? "" : " · " + esc(t("fileGone"))}</small></span>${ICON.down}`;
@@ -1116,6 +1153,128 @@
     d.querySelectorAll("input[data-k]").forEach((c) => { c.onchange = async () => { try { await vaultCall("/api/ig/settings", { [c.dataset.k]: c.checked }); toast("✓"); } catch (e) { toast(e.message); c.checked = !c.checked; } }; });
     d.querySelector("#igOff").onclick = async () => { if (!confirm(t("igDisconnect") + "?")) return; try { await vaultCall("/api/ig/disconnect", {}); d.close(); toast("✓"); } catch (e) { toast(e.message); } };
   }
+  // ------------------------------------------------ custom + ready-made agents
+  const LS_AGENTS = "nexora.agents.v1";
+  const FALLBACK_AGENTS = [
+    { id: "ig-writer", emoji: "📸", name_bn: "ইনস্টা কনটেন্ট", name_en: "Instagram writer", blurb_bn: "ক্যাপশন, হুক, ক্যারোসেল ও রিল স্ক্রিপ্ট", blurb_en: "Captions, hooks, carousels and reel scripts", tools: ["image", "web", "files"] },
+    { id: "lead-finder", emoji: "🧲", name_bn: "লিড খোঁজা", name_en: "Lead finder", blurb_bn: "নিশ ও এলাকা ধরে সম্ভাব্য ক্লায়েন্ট", blurb_en: "Find clients for a niche and location", tools: ["web", "leads", "files"] },
+    { id: "sales-dm", emoji: "💬", name_bn: "সেলস DM", name_en: "Sales DM writer", blurb_bn: "ইনস্টা/হোয়াটসঅ্যাপ-এর ছোট মেসেজ", blurb_en: "Short Instagram and WhatsApp messages", tools: ["web"] },
+    { id: "researcher", emoji: "🔎", name_bn: "রিসার্চ", name_en: "Researcher", blurb_bn: "ওয়েব খুঁজে সূত্রসহ রিপোর্ট", blurb_en: "Live web research with sources", tools: ["web", "files", "computer"] },
+    { id: "coder", emoji: "💻", name_bn: "কোডার", name_en: "Coder", blurb_bn: "পাইথন লিখে চালায়", blurb_en: "Writes and runs Python", tools: ["computer", "files", "web"] },
+    { id: "copywriter", emoji: "✍️", name_bn: "কপিরাইটার", name_en: "Copywriter", blurb_bn: "অ্যাড, ল্যান্ডিং পেজ ও ইমেইল", blurb_en: "Ads, landing pages and emails", tools: ["web", "files", "image"] },
+  ];
+  let serverAgents = null, localAgents = [];
+  try { localAgents = JSON.parse(localStorage.getItem(LS_AGENTS) || "[]") || []; } catch (e) { localAgents = []; }
+  if (!Array.isArray(localAgents)) localAgents = [];
+  function agName(a) { return (lang === "bn" ? (a.name_bn || a.name || a.name_en) : (a.name_en || a.name || a.name_bn)) || ""; }
+  function agBlurb(a) { return (lang === "bn" ? (a.blurb || a.blurb_bn || a.blurb_en) : (a.blurb || a.blurb_en || a.blurb_bn)) || ""; }
+  function allAgents() {
+    const builtins = (serverAgents || FALLBACK_AGENTS).filter((a) => !a.custom);
+    const remote = (serverAgents || []).filter((a) => a.custom);
+    const remoteIds = new Set(remote.map((a) => a.id));
+    return builtins.concat(remote, localAgents.filter((a) => a && a.id && !remoteIds.has(a.id)));
+  }
+  function currentAgent() {
+    const id = (chat().agentId || "");
+    return allAgents().find((a) => a.id === id) || null;
+  }
+  function setTopTitle() {
+    const el = document.querySelector(".top-title"); if (!el) return;
+    const ag = currentAgent();
+    el.innerHTML = ag ? `<span>${esc(ag.emoji || "🤖")} ${esc(agName(ag))}</span>` : "<span>Nexora AI</span>";
+  }
+  function saveLocalAgents() { try { localStorage.setItem(LS_AGENTS, JSON.stringify(localAgents)); } catch (e) { } }
+  function renderAgents() {
+    let pane = document.getElementById("agentsPane");
+    if (!pane) {
+      pane = document.createElement("div"); pane.id = "agentsPane"; pane.className = "agents-pane";
+      els.history.parentNode.insertBefore(pane, els.history);
+    }
+    const cur = (chat().agentId || "");
+    pane.innerHTML = `<div class="ag-head"><span>${esc(t("agents"))}</span><button type="button" class="ag-add" id="newAgentBtn">＋ ${esc(t("newAgent"))}</button></div><div class="ag-list"></div>`;
+    const list = pane.querySelector(".ag-list");
+    allAgents().forEach((a) => {
+      const b = document.createElement("button"); b.type = "button";
+      b.className = "ag-chip" + (a.id === cur ? " on" : "");
+      b.innerHTML = `${esc(a.emoji || "🤖")} ${esc(agName(a))}`;
+      b.title = agBlurb(a) || agName(a);
+      b.onclick = () => {
+        if (a.id === cur && !chat().messages.length) { newChat(); return; }
+        newChat(a);
+      };
+      b.oncontextmenu = (e) => { if (!a.custom && !a.id.startsWith("c-") && a.id !== "local") return; e.preventDefault(); openAgentEditor(a); };
+      list.appendChild(b);
+    });
+    pane.querySelector("#newAgentBtn").onclick = () => openAgentEditor(null);
+  }
+  const TOOL_OPTS = [["web", "toolWeb"], ["image", "toolImage"], ["video", "toolVideo"], ["files", "toolFiles"], ["leads", "toolLeads"], ["reminders", "toolRemind"], ["computer", "toolComputer"]];
+  function openAgentEditor(existing) {
+    const a = existing || { emoji: "🤖", name_bn: "", name_en: "", instructions: "", tools: ["web"] };
+    const tools = new Set(a.tools || ["web"]);
+    const d = sheet(`<h2>${esc(existing ? t("editAgent") : t("newAgent"))}</h2>
+      <p class="muted">${esc(t("agentSub"))}</p>
+      <label><span>${esc(t("vName"))}</span><input id="agName" maxlength="40" value="${esc(agName(a) || a.name_bn || "")}" required /></label>
+      <label><span>Emoji</span><input id="agEmoji" maxlength="4" value="${esc(a.emoji || "🤖")}" /></label>
+      <label><span>${esc(t("agentInstr"))}</span><textarea id="agInstr" rows="5" maxlength="4000">${esc(a.instructions || "")}</textarea></label>
+      <div class="tool-grid" id="agTools">${TOOL_OPTS.map(([k, label]) => `<label class="tog"><input type="checkbox" data-k="${k}" ${tools.has(k) ? "checked" : ""}/> <span>${esc(t(label))}</span></label>`).join("")}</div>
+      ${!ownerToken() ? `<p class="mini">${esc(t("agentOwnerHint"))}</p>` : ""}
+      <div class="sheet-actions">${existing && (existing.custom || (existing.id || "").startsWith("c-")) ? `<button type="button" class="ghost-btn danger" id="agDel">${esc(t("del"))}</button>` : `<span></span>`}
+      <button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button>
+      <button type="button" class="primary-btn" id="agSave">${esc(t("agentSave"))}</button></div>`);
+    d.querySelector("#agSave").onclick = async () => {
+      const name = d.querySelector("#agName").value.trim();
+      const instructions = d.querySelector("#agInstr").value.trim();
+      if (!name || instructions.length < 8) { toast(t("agentInstr")); return; }
+      const rec = {
+        id: a.id && (a.custom || (a.id || "").startsWith("c-")) ? a.id : "",
+        emoji: d.querySelector("#agEmoji").value.trim() || "🤖",
+        name_bn: name, name_en: name, name, instructions,
+        tools: [...d.querySelectorAll("#agTools input:checked")].map((i) => i.dataset.k),
+        custom: true,
+      };
+      if (!ownerToken()) rec.tools = rec.tools.filter((x) => x !== "computer");
+      try {
+        if (ownerToken()) {
+          const r = await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rec) });
+          if (!r.ok) throw new Error(await errText(r));
+          const j = await r.json();
+          if (j.agents) serverAgents = j.agents;
+          if (j.agent) rec.id = j.agent.id;
+        } else {
+          if (!rec.id) rec.id = "c-" + uid();
+          localAgents = localAgents.filter((x) => x.id !== rec.id);
+          localAgents.push(rec);
+          saveLocalAgents();
+        }
+        d.close(); renderAgents(); newChat(rec);
+      } catch (e) { toast(e.message || t("netErr")); }
+    };
+    const del = d.querySelector("#agDel");
+    if (del) del.onclick = async () => {
+      if (!confirm(t("confirmDel"))) return;
+      try {
+        if (ownerToken() && a.id) {
+          const r = await api("/api/agents/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: a.id }) });
+          if (!r.ok) throw new Error(await errText(r));
+          const j = await r.json(); if (j.agents) serverAgents = j.agents;
+        }
+        localAgents = localAgents.filter((x) => x.id !== a.id);
+        saveLocalAgents();
+        d.close(); if (chat().agentId === a.id) newChat(); else renderAgents();
+      } catch (e) { toast(e.message || t("netErr")); }
+    };
+  }
+  async function loadServerAgents() {
+    try {
+      const r = await api("/api/agents");
+      if (!r.ok) return;
+      const j = await r.json();
+      if (Array.isArray(j.agents) && j.agents.length) serverAgents = j.agents;
+    } catch (e) { /* fallback chips stay */ }
+    renderAgents();
+  }
+  loadServerAgents();
+
   const sideFoot = document.querySelector(".side-foot");
   sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn">🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button><button class="side-link" id="igBtn" hidden>📸 <span>Instagram</span></button>`);
   $("#igBtn").onclick = () => openInstagram();

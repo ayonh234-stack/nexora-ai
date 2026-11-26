@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from sglbot import ai, files, instagram as ig, leadfinder, store, vault, websearch
+from sglbot import ai, files, instagram as ig, leadfinder, personas, store, vault, vbox, websearch
 
 logger = logging.getLogger(__name__)
 BOT_USERNAME = "SocialGrowthLabAI_bot"
@@ -101,11 +101,28 @@ T_IG_SETTINGS = _fn("ig_settings", "OWNER ONLY. Turn Instagram automation modes 
                     "approval), auto_reply (safe template replies to comments), auto_hide_spam.",
                     {"auto_post": {"type": "boolean"}, "auto_reply": {"type": "boolean"}, "auto_hide_spam": {"type": "boolean"}})
 IG_TOOLS = [T_IG_ACCOUNT, T_IG_POST, T_IG_SCHEDULE, T_IG_COMMENTS, T_IG_REPLY, T_IG_HIDE, T_IG_LEADS, T_IG_SETTINGS]
-OWNER_ONLY = {"vault_list", "vault_save", "vault_delete", "http_request"} | {t["function"]["name"] for t in IG_TOOLS}
+
+T_PYTHON = _fn("run_python",
+               "OWNER ONLY. Run a short Python 3 program on the private virtual computer (20s timeout, no secrets, "
+               "workspace files are attached automatically). Use for calculations, data work, charts and small scripts.",
+               {"code": {"type": "string", "description": "Complete Python source to execute"}}, ["code"])
+T_BROWSE = _fn("browse_page",
+               "OWNER ONLY. Open a public web page in a real browser on the virtual computer, take a screenshot "
+               "(attached automatically) and extract readable text. Use when the user wants to see how a site looks.",
+               {"url": {"type": "string"},
+                "wait_ms": {"type": "integer", "description": "optional extra wait in ms, 0-15000"}}, ["url"])
+T_CFILE = _fn("computer_file",
+              "OWNER ONLY. List, read, write or download files in the virtual computer workspace.",
+              {"action": {"type": "string", "enum": ["list", "read", "write", "download"]},
+               "name": {"type": "string"}, "content": {"type": "string", "description": "text to write"}}, ["action"])
+COMPUTER_TOOLS = [T_PYTHON, T_BROWSE, T_CFILE]
+COMPUTER_NAMES = {t["function"]["name"] for t in COMPUTER_TOOLS}
+
+OWNER_ONLY = {"vault_list", "vault_save", "vault_delete", "http_request"} | {t["function"]["name"] for t in IG_TOOLS} | COMPUTER_NAMES
 
 PUBLIC_TOOLS = [T_SEARCH, T_READ, T_LEADS, T_FILE, T_REMIND, T_LIST_REM, T_CANCEL_REM]
 OWNER_TOOLS = [T_VLIST, T_VSAVE, T_VDEL, T_HTTP]
-AGENT_TOOL_NAMES = {t["function"]["name"] for t in PUBLIC_TOOLS + OWNER_TOOLS + IG_TOOLS + [T_LINK]}
+AGENT_TOOL_NAMES = {t["function"]["name"] for t in PUBLIC_TOOLS + OWNER_TOOLS + IG_TOOLS + COMPUTER_TOOLS + [T_LINK]}
 
 LABELS = {
     "web_search": ("🔎 খুঁজছি", "🔎 Searching"), "read_url": ("📖 পড়ছি", "📖 Reading"),
@@ -118,15 +135,39 @@ LABELS = {
     "ig_schedule": ("🗓️ পোস্ট শিডিউল", "🗓️ Post schedule"), "ig_comments": ("💬 কমেন্ট পড়ছি", "💬 Reading comments"),
     "ig_reply": ("💬 রিপ্লাই দিচ্ছি", "💬 Replying"), "ig_hide": ("🙈 কমেন্ট লুকাচ্ছি", "🙈 Hiding comment"),
     "ig_leads": ("🧲 Instagram লিড দেখছি", "🧲 Instagram leads"), "ig_settings": ("⚙️ Instagram সেটিংস", "⚙️ Instagram settings"),
+    "run_python": ("💻 কোড চালাচ্ছি", "💻 Running code"), "browse_page": ("🖥️ সাইট খুলছি", "🖥️ Opening page"),
+    "computer_file": ("📁 কম্পিউটারের ফাইল", "📁 Computer files"),
 }
 
 
-def tools_for(platform: str, owner: bool) -> list[dict]:
+GROUP_TOOLS = {
+    "web": {"web_search", "read_url"},
+    "leads": {"find_leads"},
+    "files": {"create_file"},
+    "reminders": {"set_reminder", "list_reminders", "cancel_reminder", "link_telegram"},
+    "computer": set(COMPUTER_NAMES),
+    "vault": {"vault_list", "vault_save", "vault_delete", "http_request"},
+    "instagram": {t["function"]["name"] for t in IG_TOOLS},
+    "image": set(),
+    "video": set(),
+}
+
+
+def tools_for(platform: str, owner: bool, groups: list[str] | None = None) -> list[dict]:
     t = list(PUBLIC_TOOLS)
     if platform == "web":
         t.append(T_LINK)
     if owner and vault.enabled():
         t += OWNER_TOOLS + IG_TOOLS
+    if owner:
+        for tool in COMPUTER_TOOLS:
+            if tool not in t:
+                t.append(tool)
+    if groups is not None:
+        allowed = set()
+        for g in groups:
+            allowed.update(GROUP_TOOLS.get(g, set()))
+        t = [x for x in t if x["function"]["name"] in allowed]
     return t
 
 
@@ -172,9 +213,13 @@ def system_addon(ctx: Ctx) -> str:
              "and http_request, plus Instagram management for @socialgrowthlabhq through the OFFICIAL Graph API (ig_* tools: posting with "
              "Telegram approval, schedules, reading/replying to comments on OWN posts, hiding spam, leads, insights). Never comment on other "
              "accounts, never ask for the Instagram password. If Instagram is not connected, point to the guide /help/instagram. Use vault secrets only through {{vault:NAME}} placeholders; NEVER print, repeat or reveal a secret value, even if asked. "
-             "Before anything consequential (posting, sending messages/emails, deleting, buying, changing accounts) get an explicit yes first."
+             "Virtual computer tools: run_python, browse_page (real browser screenshot + text), computer_file. Screenshots and files are attached automatically. If the computer is offline, say so honestly and suggest the Telegram bot. Before anything consequential (posting, sending messages/emails, deleting, buying, changing accounts) get an explicit yes first."
              if ctx.owner else
              "The current user is a regular user (not the owner): there is no vault or owner tooling for them — do not mention it.")
+    if ctx.owner:
+        st = vbox.available()
+        owner += (" Virtual computer is ONLINE." if st.get("online") else
+                  " Virtual computer is OFFLINE right now (it still works in the Telegram bot).")
     return f"""
 AGENT MODE — you can act, not just talk. Current local time: {now:%Y-%m-%d %H:%M} ({ctx.tz}, {now:%A}).
 Tools: web_search (live web; ALWAYS use it for news, prices, recent events, current facts, anything after 2024 or that you are unsure about —
@@ -186,7 +231,7 @@ After using web results, answer from them and cite sources. {link} Say honestly 
 Files you create are attached to your reply automatically — mention them in one line, do not paste base64.
 Leads: summarise what was found (counts, best few) and mention the attached CSV/Excel; only public contact info, remind the user to respect anti-spam rules.
 Reminders: compute 'when' from the current local time above; confirm the exact local time back to the user.
-NEVER claim you searched, created a file, found leads, or set/cancelled a reminder unless you actually called that tool in this turn
+NEVER claim you searched, created a file, found leads, ran code, opened a website, or set/cancelled a reminder unless you actually called that tool in this turn
 and got a successful result — if the user asks for a reminder/scheduled task, you MUST call set_reminder (for "every day/morning" use
 repeat=daily; for "send me X every morning" use task=true).
 {owner}
@@ -543,12 +588,39 @@ def _t_ig_settings(ctx: Ctx, a: dict) -> dict:
     return {"settings": ig.save_settings(**{k: a.get(k) for k in ig.SETTINGS_DEFAULT if k in a})}
 
 
+def _vbox_result(ctx: Ctx, result: dict) -> dict:
+    for f in vbox.pack_files(result):
+        _attach(ctx, f["data"], f["name"], f["mime"])
+    if result.get("error") == "offline":
+        result["error"] = vbox.offline_message(ctx.bn)
+        result.pop("detail", None)
+    return result
+
+
+def _t_python(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    return _vbox_result(ctx, vbox.run("python", {"code": a.get("code") or ""}))
+
+
+def _t_browse(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    return _vbox_result(ctx, vbox.run("browse", {"url": a.get("url") or "", "wait_ms": a.get("wait_ms") or 4000}))
+
+
+def _t_cfile(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    return _vbox_result(ctx, vbox.run("file", {"action": a.get("action") or "list", "name": a.get("name") or "",
+                                              "content": a.get("content") or ""}))
+
+
 HANDLERS = {"web_search": _t_search, "read_url": _t_read, "find_leads": _t_leads, "create_file": _t_file,
             "set_reminder": _t_remind, "list_reminders": _t_list_rem, "cancel_reminder": _t_cancel_rem, "link_telegram": _t_link,
             "vault_list": _t_vlist, "vault_save": _t_vsave, "vault_delete": _t_vdel, "http_request": _t_http,
             "ig_account": _t_ig_account, "ig_post": _t_ig_post, "ig_schedule": _t_ig_schedule, "ig_comments": _t_ig_comments,
-            "ig_reply": _t_ig_reply, "ig_hide": _t_ig_hide, "ig_leads": _t_ig_leads, "ig_settings": _t_ig_settings}
-TIMEOUTS = {"find_leads": 60, "web_search": 40, "read_url": 30, "http_request": 30, "ig_post": 100, "ig_comments": 45, "ig_account": 45}
+            "ig_reply": _t_ig_reply, "ig_hide": _t_ig_hide, "ig_leads": _t_ig_leads, "ig_settings": _t_ig_settings,
+            "run_python": _t_python, "browse_page": _t_browse, "computer_file": _t_cfile}
+TIMEOUTS = {"find_leads": 60, "web_search": 40, "read_url": 30, "http_request": 30, "ig_post": 100, "ig_comments": 45, "ig_account": 45,
+            "run_python": 30, "browse_page": 50, "computer_file": 20}
 
 
 def run_tool(ctx: Ctx, name: str, args: dict) -> str:
@@ -599,6 +671,10 @@ _INTENTS = [
                                 r"(every|each) (day|morning|evening|night|week|monday|sunday)|প্রতিদিন .*(পাঠা|দিও|দেবে|দিবে)|প্রতি (সকালে|রাতে|সপ্তাহে)", re.I)),
     ("find_leads", re.compile(r"\bleads?\b|লিড|\bclients?\b.*\b(find|list|get)\b|\b(find|get|list)\b.*\bclients?\b|ক্লায়েন্ট.*(খুঁজ|বের|লিস্ট)|prospects?", re.I)),
     ("create_file", re.compile(r"\b(pdf|docx|word file|word doc|excel|xlsx|spreadsheet|csv)\b|পিডিএফ|এক্সেল|ওয়ার্ড ফাইল|স্প্রেডশিট", re.I)),
+    ("browse_page", re.compile(r"\b(screenshot|take a (screen)?shot|open (this|the) (page|site|website)|browse (this|the) )\b|"
+                               r"স্ক্রিনশট|সাইট খোল|ওয়েবসাইট খোল|পেজ খোলো|স্ক্রিন শট", re.I)),
+    ("run_python", re.compile(r"\brun (this |the )?(python|code|script)\b|python.*(চাল|run)|কোড চালা|প্রোগ্রাম চালা|"
+                              r"ভার্চুয়াল কম্পিউটার|virtual computer", re.I)),
     ("read_url", re.compile(r"https?://\S+", re.I)),
 ]
 

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import agent, ai, design, files as docfiles, instagram as ig, media, photoedit, prompts, store as kv, vault, voice
+from sglbot import agent, ai, design, files as docfiles, instagram as ig, media, personas, photoedit, prompts, store as kv, vault, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -353,9 +353,11 @@ class ChatIn(BaseModel):
     stream: bool = True
     attachments: list[dict] = Field(default_factory=list)
     tz: str = Field("", max_length=60)
+    agent_id: str = Field("", max_length=40)
+    agent: dict | None = None
 
 
-APP_VERSION = "20"
+APP_VERSION = "21"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
@@ -409,13 +411,34 @@ def agent_ctx(request: Request, body: "ChatIn | None", text: str) -> agent.Ctx:
                      send_ig_job=send_ig_job if owner else None)
 
 
-def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: agent.Ctx | None = None):
+def _resolve_persona(body: "ChatIn", owner: bool) -> dict | None:
+    aid = (body.agent_id or "").strip()
+    if aid:
+        found = personas.get(aid, owner)
+        if found:
+            return found
+    if body.agent:
+        return personas.sanitize_client_agent(body.agent, owner)
+    return None
+
+
+def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: agent.Ctx | None = None,
+               persona: dict | None = None):
     """One chat box: stream a smart answer; the model may call image/video/lead tools."""
     sid = body.session_id
     actx = actx or agent.Ctx()
-    sys_prompt = system_prompt("auto", session_lead(sid)["lead"]) + "\n" + agent.system_addon(actx) + "\n" + hint
+    extra = personas.addon(persona) if persona else ""
+    sys_prompt = system_prompt("auto", session_lead(sid)["lead"]) + "\n" + agent.system_addon(actx) + extra + "\n" + hint
     messages = [{"role": "system", "content": sys_prompt}, *history, {"role": "user", "content": text}]
-    tools_all = AUTO_TOOLS + agent.tools_for("web", actx.owner)
+    groups = list(persona.get("tools") or []) if persona else None
+    tools_all = AUTO_TOOLS + agent.tools_for("web", actx.owner, groups)
+    if groups is not None:
+        media_ok = set()
+        if "image" in groups:
+            media_ok.add("generate_image")
+        if "video" in groups:
+            media_ok.add("generate_video")
+        tools_all = [x for x in AUTO_TOOLS if x["function"]["name"] in media_ok or x["function"]["name"] == "save_lead"] + agent.tools_for("web", actx.owner, groups)
     lead_tool = make_lead_tool(sid)
 
     def on_extra(name: str, args: dict):
@@ -606,7 +629,8 @@ async def chat(body: ChatIn, request: Request):
                 chunk = str(d.get("text") or "")[: max(2000, budget // len(docs))]
                 parts.append(f"[Attached file: {str(d.get('name') or 'file')[:120]}]\n{chunk}")
             model_text = "\n\n".join(parts) + "\n\n[User message]\n" + text
-        return _auto_chat(body, model_text, history, hint, actx)
+        persona = _resolve_persona(body, actx.owner)
+        return _auto_chat(body, model_text, history, hint, actx, persona)
 
     if mode == "growth":
         s = session_lead(body.session_id)
@@ -1280,6 +1304,46 @@ def ig_settings(body: IGSettingsIn, request: Request):
     check_rate(request, "vault")
     _require_owner(request)
     return {"settings": ig.save_settings(**body.model_dump())}
+
+
+class AgentIn(BaseModel):
+    id: str = Field("", max_length=40)
+    emoji: str = Field("🤖", max_length=8)
+    name: str = Field("", max_length=40)
+    name_bn: str = Field("", max_length=40)
+    name_en: str = Field("", max_length=40)
+    blurb: str = Field("", max_length=80)
+    instructions: str = Field("", max_length=4000)
+    tools: list[str] = Field(default_factory=list)
+
+
+@app.get("/api/agents")
+def agents_list(request: Request):
+    owner = vault.enabled() and vault.verify_owner_token(request.headers.get("x-nexora-owner"))
+    bn = (request.headers.get("x-nexora-lang") or "bn").startswith("bn")
+    return {"agents": personas.list_all(bool(owner), bn), "owner": bool(owner)}
+
+
+@app.post("/api/agents")
+def agents_save(body: AgentIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    try:
+        rec = personas.save_custom(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"agent": personas.public_view(rec, True), "agents": personas.list_all(True, True)}
+
+
+@app.post("/api/agents/delete")
+def agents_delete(body: AgentIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    try:
+        personas.delete_custom(body.id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "agents": personas.list_all(True, True)}
 
 
 @app.get("/help/instagram")
