@@ -308,7 +308,7 @@
   function blobToDataURL(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
   async function fetchRealImage(u, onWait, tries = 3) {
     for (let i = 0; i < tries; i++) {
-      let wait = 8 + i * 6;
+      let wait = 6;
       try {
         const res = await fetch(u + (i ? `&r=${i}` : ""), { mode: "cors", referrerPolicy: "no-referrer", cache: "no-store" });
         const ct = res.headers.get("content-type") || "";
@@ -316,7 +316,7 @@
           const b = await res.blob();
           if (b.size > 2000) return await blobToDataURL(b);
         }
-        const ra = parseFloat(res.headers.get("retry-after") || ""); if (ra > 0) wait = Math.min(20, ra + 1);
+        const ra = parseFloat(res.headers.get("retry-after") || ""); if (ra > 0) wait = Math.min(10, ra + 1);
       } catch (e) { /* network/CORS error: retry */ }
       if (i < tries - 1) {
         for (let left = Math.round(wait); left > 0; left--) { onWait && onWait(vt("busy").replace("{s}", left)); await sleep(1000); }
@@ -342,7 +342,7 @@
       let src = j.url;
       if (j.source === "pollinations-direct") {
         const onWait = (txt) => setProgress(ref, txt);
-        src = await fetchRealImage(j.url, onWait);
+        src = await fetchRealImage(j.url, onWait, 2);
         if (!src) src = await serverFallbackImage(j.prompt || prompt, 1024, 1024, onWait);
         if (!src) throw new Error(vt("allBusy"));
       }
