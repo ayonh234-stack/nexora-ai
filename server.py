@@ -41,7 +41,12 @@ AI_MODEL = (os.getenv("AI_MODEL") or "").strip() or "gemini-3.5-flash-lite"
 GEMINI_BASE = (os.getenv("GEMINI_BASE_URL") or "").strip() or "https://generativelanguage.googleapis.com/v1beta/openai/"
 TG_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 ADMIN_CHAT_ID = (os.getenv("ADMIN_CHAT_ID") or "").strip()
-DATA_DIR = Path(os.getenv("DATA_DIR") or (ROOT / "data"))
+ON_VERCEL = bool(os.getenv("VERCEL"))
+# Serverless filesystems are read-only except /tmp, and /tmp is not shared between instances.
+DATA_DIR = Path(os.getenv("DATA_DIR") or ("/tmp/nexora-data" if ON_VERCEL else ROOT / "data"))
+# Return generated media inline (data: URL) when files can't be served back reliably (serverless).
+MEDIA_INLINE = (os.getenv("MEDIA_INLINE") or ("1" if ON_VERCEL else "0")) == "1"
+VIDEO_TIMEOUT = int(os.getenv("VIDEO_TIMEOUT") or (110 if ON_VERCEL else 180))
 MEDIA_DIR = DATA_DIR / "media"
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 LEADS_CSV = DATA_DIR / "leads.csv"
@@ -160,6 +165,10 @@ def system_prompt(mode: str, lead: dict | None = None) -> str:
 
 
 def save_media(data: bytes, ext: str) -> str:
+    if MEDIA_INLINE:
+        import base64
+        mime = {"png": "image/png", "jpg": "image/jpeg", "mp4": "video/mp4"}.get(ext, "application/octet-stream")
+        return f"data:{mime};base64,{base64.b64encode(data).decode()}"
     name = f"{uuid.uuid4().hex}.{ext}"
     (MEDIA_DIR / name).write_bytes(data)
     files = sorted(MEDIA_DIR.iterdir(), key=lambda p: p.stat().st_mtime)
@@ -264,7 +273,7 @@ class ChatIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID)}
+    return {"ok": True, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID)}
 
 
 @app.post("/api/chat")
@@ -368,10 +377,12 @@ async def video(body: MediaIn, request: Request):
         raise HTTPException(400, "empty prompt")
     try:
         res = await asyncio.wait_for(
-            asyncio.to_thread(media.generate_video, prompt), timeout=media.VIDEO_TIMEOUT_SECONDS
+            asyncio.to_thread(media.generate_video, prompt), timeout=VIDEO_TIMEOUT
         )
     except Exception as exc:
         logger.exception("video failed")
+        if isinstance(exc, asyncio.TimeoutError):
+            raise HTTPException(504, "ভিডিও তৈরিতে বেশি সময় লাগছে, একটু পরে আবার চেষ্টা করুন। / The free video queue is slow right now — please try again shortly.")
         if "quota" in str(exc).lower():
             raise HTTPException(503, "আজকের ফ্রি ভিডিও কোটা শেষ হয়ে গেছে, কিছুক্ষণ পরে (বা আগামীকাল) আবার চেষ্টা করুন।\n\n"
                                      "Today's free video quota is used up — please try again later (or tomorrow).")

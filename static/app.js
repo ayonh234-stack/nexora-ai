@@ -67,7 +67,10 @@
     ids.slice(0, 40).forEach((id) => { chats[id].messages = chats[id].messages.slice(-120); });
     try { localStorage.setItem(LS_CHATS, JSON.stringify(chats)); }
     catch { // quota: strip embedded photo previews
-      Object.values(chats).forEach((c) => c.messages.forEach((m) => { if (m.photo && m.photo.startsWith("data:")) m.photo = ""; }));
+      Object.values(chats).forEach((c) => c.messages.forEach((m) => {
+        if (m.photo && m.photo.startsWith("data:")) m.photo = "";
+        if (m.url && m.url.startsWith("data:") && (m.type === "image" || m.type === "video")) { m.content = (m.type === "video" ? "🎬 " : "🖼️ ") + (m.prompt || ""); m.url = ""; m.type = ""; }
+      }));
       try { localStorage.setItem(LS_CHATS, JSON.stringify(chats)); } catch {}
     }
     if (current) localStorage.setItem(LS_CUR, current);

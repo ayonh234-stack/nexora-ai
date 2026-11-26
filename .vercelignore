@@ -1,0 +1,12 @@
+android
+android-build-output
+deploy
+logs
+data
+.venv
+.env
+.render_key
+Dockerfile
+render.yaml
+run-server.sh
+run-tunnel.sh
