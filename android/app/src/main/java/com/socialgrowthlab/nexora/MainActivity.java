@@ -7,6 +7,8 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -14,6 +16,7 @@ import android.os.Environment;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -30,6 +33,8 @@ public class MainActivity extends Activity {
     private static final String KEY_URL = "server_url";
     private static final String SETUP = "file:///android_asset/setup.html";
     private static final int FILE_REQ = 42;
+    private static final int MIC_REQ = 43;
+    private PermissionRequest pendingMic;
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -53,7 +58,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
-        s.setUserAgentString(s.getUserAgentString() + " NexoraApp/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " NexoraApp/1.1");
         CookieManager.getInstance().setAcceptCookie(true);
 
         web.addJavascriptInterface(new Bridge(), "NexoraAndroid");
@@ -141,6 +146,33 @@ public class MainActivity extends Activity {
     }
 
     private class Chrome extends WebChromeClient {
+        @Override public void onPermissionRequest(final PermissionRequest request) {
+            runOnUiThread(() -> {
+                boolean wantsMic = false;
+                for (String r : request.getResources()) {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) wantsMic = true;
+                }
+                Uri origin = request.getOrigin();
+                String host = origin != null && origin.getHost() != null ? origin.getHost() : "";
+                // Only our own Nexora server may use the microphone.
+                if (!wantsMic || appHost.isEmpty() || !host.equalsIgnoreCase(appHost)) {
+                    request.deny();
+                    return;
+                }
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                } else {
+                    if (pendingMic != null) pendingMic.deny();
+                    pendingMic = request;
+                    requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, MIC_REQ);
+                }
+            });
+        }
+
+        @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+            if (pendingMic == request) pendingMic = null;
+        }
+
         @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
             fileCallback = cb;
@@ -155,6 +187,23 @@ public class MainActivity extends Activity {
             }
             return true;
         }
+    }
+
+    @Override public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
+        if (req == MIC_REQ) {
+            PermissionRequest p = pendingMic;
+            pendingMic = null;
+            if (p != null) {
+                if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                    p.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                } else {
+                    p.deny();
+                    Toast.makeText(this, "Microphone permission needed for voice / ভয়েসের জন্য মাইক্রোফোন অনুমতি দিন", Toast.LENGTH_LONG).show();
+                }
+            }
+            return;
+        }
+        super.onRequestPermissionsResult(req, perms, results);
     }
 
     @Override protected void onActivityResult(int req, int result, Intent data) {

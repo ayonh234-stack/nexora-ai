@@ -11,7 +11,7 @@
       leadSub: "তথ্য দিন, Md Zahngir Hossain নিজে যোগাযোগ করবেন।", fName: "নাম", fIg: "Instagram handle", fBudget: "বাজেট",
       fContact: "যোগাযোগ (Email / WhatsApp / Telegram)", cancel: "বাতিল", submit: "পাঠান",
       placeholder: { chat: "Nexora-কে কিছু জিজ্ঞেস করুন…", caption: "পোস্টের বিষয়/নিশ লিখুন, ক্যাপশন বানিয়ে দেব…", growth: "আপনার Instagram/TikTok গ্রোথ নিয়ে জিজ্ঞেস করুন…", image: "কীসের ছবি চান? যেমন: নীল পদ্ম, সূর্যাস্তে…", video: "কীসের ভিডিও চান? যেমন: একটি লাল আপেল ঘুরছে" },
-      hint: { chat: "ছবি পাঠাতে 📷 চাপুন · বাংলা বা English", caption: "ক্যাপশন, হ্যাশট্যাগ, রিল আইডিয়া", growth: "SocialGrowthLab · অর্গানিক গ্রোথ, কোনো ফেক ফলোয়ার নয়", image: "ফ্রি AI ছবি · ১০–৪০ সেকেন্ড লাগতে পারে", video: "ফ্রি ২ সেকেন্ডের ক্লিপ · দিনে সীমিত · ২০–৯০ সেকেন্ড" },
+      hint: { chat: "📷 ছবি · 🎤 ভয়েসে বলুন, ভয়েসে উত্তর · বাংলা বা English", caption: "ক্যাপশন, হ্যাশট্যাগ, রিল আইডিয়া", growth: "SocialGrowthLab · অর্গানিক গ্রোথ, কোনো ফেক ফলোয়ার নয়", image: "ফ্রি AI ছবি · ১০–৪০ সেকেন্ড লাগতে পারে", video: "ফ্রি ২ সেকেন্ডের ক্লিপ · দিনে সীমিত · ২০–৯০ সেকেন্ড" },
       welcomeTitle: "আমি Nexora AI", welcomeSub: "ব্যবসা, মার্কেটিং, কনটেন্ট, রিসার্চ আর দৈনন্দিন কাজে আপনার অল-ইন-ওয়ান AI সহকারী।",
       leadBtn: "📝 ফ্রি কনসালটেশন ফর্ম", copied: "কপি হয়েছে", copy: "কপি", del: "মুছুন", download: "ডাউনলোড",
       imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", photoQ: "এই ছবিটা নিয়ে কী জানতে চান? (ঐচ্ছিক)",
@@ -24,7 +24,7 @@
       leadSub: "Share your details and Md Zahngir Hossain will reach out personally.", fName: "Name", fIg: "Instagram handle", fBudget: "Budget",
       fContact: "Contact (Email / WhatsApp / Telegram)", cancel: "Cancel", submit: "Send",
       placeholder: { chat: "Ask Nexora anything…", caption: "Describe your post or niche for captions…", growth: "Ask about growing your Instagram/TikTok…", image: "Describe an image, e.g. a blue lotus at sunset", video: "Describe a clip, e.g. a red apple spinning" },
-      hint: { chat: "Tap 📷 to send a photo · Bengali or English", caption: "Captions, hashtags, reel ideas", growth: "SocialGrowthLab · organic growth, no fake followers", image: "Free AI images · may take 10–40s", video: "Free 2-second clips · daily limit · 20–90s" },
+      hint: { chat: "📷 photo · 🎤 speak and get a voice reply · Bengali or English", caption: "Captions, hashtags, reel ideas", growth: "SocialGrowthLab · organic growth, no fake followers", image: "Free AI images · may take 10–40s", video: "Free 2-second clips · daily limit · 20–90s" },
       welcomeTitle: "I'm Nexora AI", welcomeSub: "Your all-in-one AI assistant for business, marketing, content, research and everyday life.",
       leadBtn: "📝 Free consultation form", copied: "Copied", copy: "Copy", del: "Delete", download: "Download",
       imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", photoQ: "What do you want to know about this photo? (optional)",
@@ -51,11 +51,17 @@
   let busy = false;
   let pendingPhoto = null;
   let deferredInstall = null;
+  const audioCache = new Map(); // message id -> data: URL (kept in memory only, never in localStorage)
+  const VT = {
+    bn: { listen: "শুনুন", rec: "রেকর্ড হচ্ছে… থামাতে আবার 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।", voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…" },
+    en: { listen: "Listen", rec: "Recording… tap 🎤 again to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.", voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…" },
+  };
+  function vt(k) { return (VT[lang] || VT.bn)[k]; }
 
   const els = {
     messages: $("#messages"), input: $("#input"), form: $("#composer"), send: $("#sendBtn"), modes: $("#modes"),
     hint: $("#hint"), drawer: $("#drawer"), scrim: $("#scrim"), history: $("#historyList"), photoInput: $("#photoInput"),
-    photoPreview: $("#photoPreview"), photoThumb: $("#photoThumb"), toast: $("#toast"), leadDialog: $("#leadDialog"), leadForm: $("#leadForm"),
+    photoPreview: $("#photoPreview"), photoThumb: $("#photoThumb"), toast: $("#toast"), mic: $("#micBtn"), leadDialog: $("#leadDialog"), leadForm: $("#leadForm"),
   };
 
   function t(k) { return T[lang][k]; }
@@ -157,6 +163,11 @@
         const cp = document.createElement("button"); cp.textContent = "📋 " + t("copy");
         cp.onclick = () => navigator.clipboard?.writeText(m.content).then(() => toast(t("copied")));
         tools.appendChild(cp);
+        if (!m.error && !(m.aid && audioCache.has(m.aid))) {
+          const sp = document.createElement("button"); sp.textContent = "🔊 " + vt("listen");
+          sp.onclick = () => speak(m, row, sp);
+          tools.appendChild(sp);
+        }
       }
       b.appendChild(tools);
     }
@@ -184,6 +195,25 @@
     b.innerHTML = md(m.content);
     b.querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
     if (m.error) b.classList.add("err");
+    if (m.aid && audioCache.has(m.aid)) addAudio(b, audioCache.get(m.aid), m.autoplay);
+  }
+  function addAudio(b, src, autoplay) {
+    const a = document.createElement("audio"); a.className = "voice-audio"; a.controls = true; a.preload = "auto"; a.src = src;
+    b.prepend(a);
+    if (autoplay) { a.play().catch(() => {}); }
+    return a;
+  }
+  async function speak(m, row, btn) {
+    btn.disabled = true; const old = btn.textContent; btn.textContent = "⏳ " + vt("ttsWait");
+    try {
+      const res = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: m.content.slice(0, 6000) }) });
+      if (!res.ok) throw new Error(await errText(res));
+      const j = await res.json();
+      m.aid = m.aid || "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      audioCache.set(m.aid, j.audio);
+      addAudio(row.querySelector(".bubble"), j.audio, true);
+      btn.remove();
+    } catch (e) { toast(e.message || t("netErr")); btn.disabled = false; btn.textContent = old; }
   }
   function scrollEnd(smooth = true) { requestAnimationFrame(() => els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" })); }
   function renderHistory() {
@@ -324,6 +354,81 @@
       }
     } finally { busy = false; els.send.disabled = false; }
   }
+
+  // ------------------------------------------------ voice (mic → WAV 16 kHz mono → /api/voice)
+  const MAX_REC_MS = 60000;
+  let rec = null;
+  function encodeWav(chunks, inRate) {
+    let len = 0; chunks.forEach((c) => { len += c.length; });
+    const pcm = new Float32Array(len); let o = 0; chunks.forEach((c) => { pcm.set(c, o); o += c.length; });
+    const outRate = 16000, ratio = inRate / outRate, n = Math.floor(pcm.length / ratio);
+    const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (off, str) => { for (let i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, outRate, true); v.setUint32(28, outRate * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) {
+      const start = Math.floor(i * ratio), end = Math.min(pcm.length, Math.floor((i + 1) * ratio)); let sum = 0, cnt = 0;
+      for (let j = start; j < end; j++) { sum += pcm[j]; cnt++; }
+      const x = Math.max(-1, Math.min(1, cnt ? sum / cnt : 0));
+      v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+  async function startRec() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast(vt("noMic")); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+    catch (e) { toast(e && e.name === "NotFoundError" ? vt("noMic") : vt("micDenied")); return; }
+    const Ctx = window.AudioContext || window.webkitAudioContext; const ctx = new Ctx();
+    const src = ctx.createMediaStreamSource(stream); const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    proc.onaudioprocess = (e) => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    src.connect(proc); proc.connect(ctx.destination);
+    const started = Date.now();
+    rec = { stream, ctx, src, proc, chunks, started };
+    els.mic.classList.add("recording");
+    const tick = () => { if (!rec) return; const s = Math.round((Date.now() - started) / 1000); els.hint.textContent = `🔴 ${s}s · ${vt("rec")}`; };
+    tick(); rec.timer = setInterval(() => { tick(); if (Date.now() - started >= MAX_REC_MS) stopRec(); }, 500);
+  }
+  async function stopRec() {
+    const r = rec; if (!r) return; rec = null;
+    clearInterval(r.timer); els.mic.classList.remove("recording"); updateComposer();
+    try { r.proc.disconnect(); r.src.disconnect(); } catch {}
+    r.stream.getTracks().forEach((tr) => tr.stop());
+    const rate = r.ctx.sampleRate; r.ctx.close().catch(() => {});
+    if (Date.now() - r.started < 700) { toast(vt("tooShort")); return; }
+    await sendVoice(encodeWav(r.chunks, rate));
+  }
+  async function sendVoice(blob) {
+    if (busy) return;
+    if (!navigator.onLine) { toast(t("offline")); return; }
+    busy = true; els.send.disabled = true; els.mic.disabled = true;
+    const user = push({ role: "user", content: "🎤 …" });
+    const bot = push({ role: "assistant", content: "", pending: true, progress: vt("voiceWait") });
+    try {
+      const fd = new FormData();
+      fd.append("file", blob, "voice.wav"); fd.append("mode", mode); fd.append("session_id", sid + ":" + current);
+      fd.append("history", JSON.stringify(historyPayload()));
+      const res = await api("/api/voice", { method: "POST", body: fd });
+      if (!res.ok) throw new Error(await errText(res));
+      const j = await res.json();
+      user.m.content = "🎤 " + (j.transcript || "…"); refresh(user);
+      const c = chat(); if (!c.title || c.title.startsWith("🎤")) { c.title = user.m.content.slice(0, 60); renderHistory(); }
+      if (j.action === "image" || j.action === "video") {
+        bot.m.progress = j.action === "image" ? t("imgWait") : t("vidWait"); refresh(bot);
+        await (j.action === "image" ? genImage(j.prompt, bot) : genVideo(j.prompt, bot));
+      } else {
+        bot.m.content = j.reply || t("netErr"); bot.m.pending = false; bot.m.progress = "";
+        if (j.audio) { bot.m.aid = "a" + Date.now().toString(36); audioCache.set(bot.m.aid, j.audio); bot.m.autoplay = true; }
+        refresh(bot); bot.m.autoplay = false;
+      }
+    } catch (e) {
+      if (user.m.content === "🎤 …") { user.m.content = "🎤"; refresh(user); }
+      Object.assign(bot.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); refresh(bot);
+    } finally { busy = false; els.send.disabled = false; els.mic.disabled = false; save(); }
+  }
+  els.mic.onclick = () => { if (rec) stopRec(); else if (!busy) startRec(); };
 
   // ------------------------------------------------ photo
   function shrink(file) {

@@ -39,3 +39,11 @@ cp app/build/outputs/apk/debug/app-debug.apk ../android-build-output/NexoraAI.ap
 
 ## Telegram token on Render
 The web app never polls Telegram. `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID` are only used to *send* lead alerts (`sendMessage`), so it is safe to use the same token the Telegram bot already polls with elsewhere — no `getUpdates` conflict.
+
+## Voice (v1.1)
+- Tap 🎤 in the composer to record (up to 60 s). The browser records 16 kHz mono WAV and posts it to `POST /api/voice`
+  (multipart: `file`, `mode`, `session_id`, `history`). The server transcribes it with Gemini, answers with the same
+  mode logic, and returns `{transcript, reply, audio}` where `audio` is an MP3 data URL made with the free edge-tts voices
+  (`bn-BD-NabanitaNeural` for Bengali, `en-US-AvaNeural` for English).
+- `POST /api/tts {text}` powers the 🔊 Listen button under any reply. Audio is kept in memory only, never in localStorage.
+- Android 1.1.0 asks for the microphone permission and only grants it to the configured Nexora server.

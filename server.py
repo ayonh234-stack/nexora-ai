@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import ai, media, prompts
+from sglbot import ai, media, prompts, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -81,6 +81,8 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "image": [(6, 60), (60, 86400)],
     "video": [(2, 120), (10, 86400)],
     "lead": [(5, 60), (30, 86400)],
+    "voice": [(10, 60), (120, 86400)],
+    "tts": [(15, 60), (200, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _rl_lock = threading.Lock()
@@ -88,7 +90,7 @@ _rl_lock = threading.Lock()
 
 PROXY_HOPS = max(1, int(os.getenv("TRUST_PROXY_HOPS", "1") or 1))
 # Whole-server daily caps (all visitors together) to protect the free quotas.
-_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200}
+_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000}
 
 
 def client_ip(request: Request) -> str:
@@ -428,6 +430,99 @@ async def vision(request: Request, file: UploadFile = File(...), question: str =
         logger.exception("vision failed")
         raise HTTPException(502, "দুঃখিত, ছবিটি এখন পড়া যাচ্ছে না। / Sorry, I couldn't read that photo right now.")
     return {"reply": reply}
+
+
+VOICE_NOTE = (
+    "The user sent this as a VOICE message and your reply will be read aloud. "
+    "Answer conversationally and fairly briefly (about 40-120 words), with no tables or code blocks."
+)
+
+
+async def _audio_reply(text: str) -> str:
+    try:
+        mp3 = await voice.synthesize_async(text)
+    except Exception:
+        logger.exception("tts failed")
+        return ""
+    import base64
+    return "data:audio/mpeg;base64," + base64.b64encode(mp3).decode()
+
+
+@app.post("/api/voice")
+async def voice_chat(
+    request: Request,
+    file: UploadFile = File(...),
+    mode: str = Form("chat"),
+    session_id: str = Form("anon"),
+    history: str = Form("[]"),
+):
+    check_rate(request, "voice")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty audio")
+    if len(data) > 4 * 1024 * 1024:
+        raise HTTPException(413, "অডিও খুব বড় (১ মিনিটের কম রাখুন) / Audio too long — keep it under a minute")
+    mode = mode if mode in MODES else "chat"
+    session_id = (session_id or "anon")[:80]
+    try:
+        transcript = await asyncio.to_thread(
+            voice.transcribe, GEMINI_KEY, AI_MODEL, data, (file.content_type or "audio/wav")
+        )
+    except Exception:
+        logger.exception("transcribe failed")
+        raise HTTPException(502, "দুঃখিত, অডিওটি এখন বোঝা যাচ্ছে না। / Sorry, I couldn't understand the audio right now.")
+    if not transcript:
+        return {"transcript": "", "reply": "অডিওতে কোনো কথা শুনতে পাইনি, আবার বলুন। / I couldn't hear any speech — please try again.", "audio": ""}
+
+    if mode in ("chat", "caption"):
+        if media.looks_like_video_request(transcript):
+            return {"transcript": transcript, "action": "video", "prompt": media.extract_video_prompt(transcript) or transcript}
+        if media.looks_like_image_request(transcript):
+            return {"transcript": transcript, "action": "image", "prompt": media.extract_image_prompt(transcript) or transcript}
+    if mode in ("image", "video"):
+        return {"transcript": transcript, "action": mode, "prompt": transcript}
+
+    try:
+        hist = clean_history(json.loads(history or "[]"))
+    except Exception:
+        hist = []
+    hint = language_hint(transcript) + "\n" + VOICE_NOTE
+    out: dict[str, Any] = {"transcript": transcript}
+    try:
+        if mode == "growth":
+            s = session_lead(session_id)
+            reply = await asyncio.to_thread(
+                ai.complete, client, CFG,
+                system_prompt=system_prompt("growth", s["lead"]) + "\n" + hint,
+                history=hist, user_message=transcript,
+                tools=ai.growth_tools(), on_tool=make_lead_tool(session_id),
+            )
+            out.update(lead=s["lead"], lead_saved=s["submitted"])
+        else:
+            reply = await asyncio.to_thread(
+                ai.complete, client, CFG, system_prompt=system_prompt(mode) + "\n" + hint,
+                history=hist, user_message=transcript,
+            )
+    except Exception:
+        logger.exception("voice chat failed")
+        reply = ""
+    reply = reply or friendly_ai_error()
+    out["reply"] = reply
+    out["audio"] = await _audio_reply(reply)
+    return out
+
+
+class TtsIn(BaseModel):
+    text: str = Field(..., min_length=1, max_length=6000)
+
+
+@app.post("/api/tts")
+async def tts(body: TtsIn, request: Request):
+    check_rate(request, "tts")
+    audio = await _audio_reply(body.text)
+    if not audio:
+        raise HTTPException(502, "দুঃখিত, এখন ভয়েস তৈরি করা গেল না। / Sorry, couldn't create the voice right now.")
+    return {"audio": audio}
 
 
 class LeadIn(BaseModel):

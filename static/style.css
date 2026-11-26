@@ -142,3 +142,7 @@ dialog.sheet::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
   .drawer { transform: none; position: sticky; top: 0; height: 100dvh; }
   .scrim, #closeDrawer, #openDrawer { display: none; }
 }
+
+.composer .icon-btn.mic.recording { color: #fff; background: #ef4444; border-radius: 50%; animation: micPulse 1.2s infinite; }
+@keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 70% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+.bubble audio.voice-audio { display: block; width: 100%; max-width: 320px; height: 40px; margin: 2px 0 8px; }
