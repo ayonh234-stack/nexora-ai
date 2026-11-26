@@ -121,13 +121,15 @@ def pick_voice(text: str) -> str:
     return VOICE_BN if has_bengali(text) else VOICE_EN
 
 
-async def synthesize_async(text: str, voice: str | None = None) -> bytes:
+VOICE_FALLBACKS = {
+    VOICE_BN: [VOICE_BN, VOICE_BN, "bn-IN-TanishaaNeural", "bn-BD-PradeepNeural", VOICE_BN],
+    VOICE_EN: [VOICE_EN, VOICE_EN, "en-US-JennyNeural"],
+}
+
+
+async def _edge_once(clean: str, voice: str) -> bytes:
     import edge_tts
 
-    clean = speech_text(text)
-    if not clean:
-        raise ValueError("nothing to speak")
-    voice = voice or pick_voice(clean)
     comm = edge_tts.Communicate(clean, voice)
     out = bytearray()
     async for chunk in comm.stream():
@@ -135,7 +137,29 @@ async def synthesize_async(text: str, voice: str | None = None) -> bytes:
             out.extend(chunk["data"])
     if not out:
         raise RuntimeError("TTS returned no audio")
-    return bytes(out)  # MP3 (24kHz mono)
+    return bytes(out)
+
+
+async def synthesize_async(text: str, voice: str | None = None) -> bytes:
+    """Text -> MP3 bytes with the free edge-tts voices.
+
+    The free endpoint sometimes answers with no audio (seen intermittently from cloud IPs for
+    Bengali), so retry and fall back to a sibling voice before giving up.
+    """
+    clean = speech_text(text)
+    if not clean:
+        raise ValueError("nothing to speak")
+    voice = voice or pick_voice(clean)
+    chain = VOICE_FALLBACKS.get(voice, [voice, voice])
+    last: Exception | None = None
+    for i, v in enumerate(chain):
+        try:
+            return await _edge_once(clean, v)
+        except Exception as exc:  # NoAudioReceived, WebSocket errors, ...
+            last = exc
+            logger.warning("edge-tts attempt %s with %s failed: %s", i + 1, v, type(exc).__name__)
+            await asyncio.sleep(0.4 * (i + 1))
+    raise RuntimeError(f"TTS failed: {last}")
 
 
 def synthesize(text: str, voice: str | None = None) -> bytes:
