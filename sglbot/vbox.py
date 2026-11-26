@@ -55,12 +55,16 @@ def _ensure() -> None:
 
 
 def is_local() -> bool:
-    """True when this process can run the computer itself (the box, not Vercel)."""
-    if os.getenv("VERCEL"):
-        return False
+    """True when this process can run the computer itself.
+
+    The Telegram bot (NEXORA_VBOX_LOCAL=1) always runs locally. On Vercel, tools
+    run inside this function unless BOX_URL points at a dedicated host.
+    """
     if (os.getenv("NEXORA_VBOX_LOCAL") or "").strip() == "1":
         return True
-    return Path(CHROME).exists() and not os.getenv("VERCEL")
+    if os.getenv("VERCEL"):
+        return not _remote_url()
+    return Path(CHROME).exists()
 
 
 def _token() -> str:
@@ -90,7 +94,8 @@ def publish_endpoint(url: str) -> None:
 
 def available() -> dict:
     if is_local():
-        return {"online": True, "where": "local"}
+        where = "vercel" if os.getenv("VERCEL") else "local"
+        return {"online": True, "where": where, "screenshot": Path(CHROME).exists()}
     url = _remote_url()
     if not url or not _token():
         return {"online": False, "where": "remote", "reason": "not configured"}
