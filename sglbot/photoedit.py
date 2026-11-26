@@ -280,8 +280,9 @@ def pollinations_image(prompt: str, width: int = 1024, height: int = 1024, attem
 
 def flux_image(prompt: str, width: int = 1024, height: int = 1024) -> bytes | None:
     """Free FLUX.1-schnell Hugging Face Space (ZeroGPU, small daily quota per IP)."""
-    w = max(256, min(1024, int(width) // 32 * 32))
-    h = max(256, min(1024, int(height) // 32 * 32))
+    scale = min(1.0, 1024 / max(int(width), int(height), 1))
+    w = max(256, min(1024, int(width * scale) // 32 * 32))
+    h = max(256, min(1024, int(height * scale) // 32 * 32))
     for attempt in range(2):
         try:
             res = _hf_client(FLUX_SPACE).predict(

@@ -578,8 +578,8 @@ async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
 
 class FallbackImageIn(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1500)
-    width: int = Field(1024, ge=256, le=1280)
-    height: int = Field(1024, ge=256, le=1280)
+    width: int = Field(1024, ge=64, le=4096)
+    height: int = Field(1024, ge=64, le=4096)
 
 
 @app.post("/api/image/fallback")
