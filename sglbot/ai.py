@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from typing import Any
@@ -41,6 +42,47 @@ _TOOLS_UNSUPPORTED_MARKERS = (
     "invalid argument",
     "does not support",
 )
+
+
+# Strongest free Gemini models first; each falls back to the next on 429/503/404/timeouts,
+# and the configured model (flash-lite by default) is always the last resort.
+SMART_GEMINI_MODELS = ("gemini-3-flash-preview", "gemini-3.5-flash")
+_FALLBACK_MARKERS = _RETRYABLE_MARKERS + ("404", "not found", "no longer available", "quota", "resource_exhausted", "permission")
+_cooldown: dict[str, float] = {}
+
+
+def model_chain(cfg) -> list[str]:
+    env = (os.getenv("AI_MODELS") or "").strip()
+    if env:
+        chain = [m.strip() for m in env.split(",") if m.strip()]
+    elif str(cfg.ai_model).startswith("gemini"):
+        chain = [*SMART_GEMINI_MODELS, cfg.ai_model]
+    else:
+        chain = [cfg.ai_model]
+    seen: list[str] = []
+    for m in chain:
+        if m not in seen:
+            seen.append(m)
+    now = time.time()
+    usable = [m for m in seen[:-1] if _cooldown.get(m, 0) < now] + seen[-1:]
+    return usable
+
+
+def mark_failed(model: str, exc: BaseException) -> None:
+    text = _err_text(exc)
+    secs = 900 if ("quota" in text or "429" in text or "404" in text or "no longer" in text) else 180
+    _cooldown[model] = time.time() + secs
+    logger.warning("Model %s unavailable (%s); cooling down %ss", model, type(exc).__name__, secs)
+
+
+def should_fallback(exc: BaseException) -> bool:
+    text = _err_text(exc)
+    return any(m in text for m in _FALLBACK_MARKERS)
+
+
+def fast_client(client: OpenAI, last: bool) -> OpenAI:
+    """Non-final models fail fast so the fallback model can still answer in time."""
+    return client if last else client.with_options(timeout=30.0, max_retries=0)
 
 
 def build_client(cfg: Config) -> OpenAI:
@@ -81,10 +123,12 @@ def complete(
 
     tools_enabled = bool(tools) and on_tool is not None
     last_message_content = ""
+    chain = model_chain(cfg)
+    model_i = 0
 
     for round_i in range(3):
         kwargs: dict[str, Any] = {
-            "model": cfg.ai_model,
+            "model": chain[model_i],
             "messages": messages,
             "temperature": 0.7,
         }
@@ -93,22 +137,28 @@ def complete(
             kwargs["tool_choice"] = "auto"
 
         response = None
-        for attempt in range(3):
+        for attempt in range(3 + len(chain)):
+            kwargs["model"] = chain[model_i]
+            last_model = model_i == len(chain) - 1
             try:
-                response = client.chat.completions.create(**kwargs)
+                response = fast_client(client, last_model).chat.completions.create(**kwargs)
                 break
             except Exception as exc:
+                if not last_model and round_i == 0 and should_fallback(exc):
+                    mark_failed(chain[model_i], exc)
+                    model_i += 1
+                    continue
                 if tools_enabled and _is_tools_unsupported(exc):
                     logger.warning(
                         "Tool calling not accepted by %s (%s); retrying without tools",
-                        cfg.ai_model,
+                        kwargs["model"],
                         type(exc).__name__,
                     )
                     tools_enabled = False
                     kwargs.pop("tools", None)
                     kwargs.pop("tool_choice", None)
                     continue
-                if _is_retryable(exc) and attempt < 2:
+                if _is_retryable(exc) and attempt < 2 + len(chain):
                     delay = 1.5 * (attempt + 1)
                     logger.warning(
                         "AI request failed (%s); retrying in %.1fs",

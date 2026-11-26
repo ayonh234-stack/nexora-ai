@@ -1,6 +1,7 @@
 """Image generation, image understanding, and free text-to-video."""
 
 from __future__ import annotations
+import os
 
 import base64
 import json
@@ -240,6 +241,8 @@ def generate_image(api_key: str, prompt: str) -> ImageResult:
     # then the free FLUX.1-schnell Hugging Face Space.
     from sglbot import photoedit
 
+    if not prompt.isascii():  # free generators understand English far better than Bengali
+        prompt = photoedit.english_image_prompt(api_key, os.getenv("AI_MODEL") or "gemini-3.5-flash-lite", prompt)
     got = photoedit.generate_image_free(prompt, 1024, 1024)
     if got:
         data, source = got

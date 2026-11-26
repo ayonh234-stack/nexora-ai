@@ -189,6 +189,9 @@ def _ensure_png_rgba(data: bytes) -> bytes:
 
 
 # ---------------------------------------------------------------- background removal
+_REMBG_SESSION = None
+
+
 def remove_background(image: bytes) -> tuple[bytes, str]:
     """Return (transparent PNG bytes, source)."""
     from gradio_client import handle_file
@@ -196,6 +199,21 @@ def remove_background(image: bytes) -> tuple[bytes, str]:
     src = _tmp_image(downscale(image, 1280))
     errors: list[str] = []
     try:
+        # Local CPU model first where it is installed (the Telegram bot box): no quota, no queue.
+        try:
+            from rembg import new_session, remove  # type: ignore
+
+            global _REMBG_SESSION
+            if _REMBG_SESSION is None:
+                _REMBG_SESSION = new_session(os.getenv("REMBG_MODEL", "isnet-general-use"))
+            with open(src, "rb") as f:
+                out = remove(f.read(), session=_REMBG_SESSION)
+            return _ensure_png_rgba(out), "rembg-local"
+        except ImportError:
+            pass
+        except Exception as exc:
+            errors.append(f"rembg: {type(exc).__name__}")
+            logger.warning("local rembg failed: %s", exc)
         for space, api in RMBG_SPACES:
             for attempt in range(2):
                 try:
@@ -216,19 +234,6 @@ def remove_background(image: bytes) -> tuple[bytes, str]:
                     if _quota_hint(exc):
                         break
                     time.sleep(2)
-        # Local model (only where rembg is installed, e.g. the Telegram bot box).
-        try:
-            from rembg import new_session, remove  # type: ignore
-
-            session = new_session(os.getenv("REMBG_MODEL", "isnet-general-use"))
-            with open(src, "rb") as f:
-                out = remove(f.read(), session=session)
-            return _ensure_png_rgba(out), "rembg-local"
-        except ImportError:
-            pass
-        except Exception as exc:
-            errors.append(f"rembg: {type(exc).__name__}")
-            logger.warning("local rembg failed: %s", exc)
     finally:
         try:
             os.unlink(src)
@@ -244,6 +249,58 @@ def pollinations_url(prompt: str, width: int, height: int, seed: int | None = No
     q = urllib.parse.quote(prompt[:700], safe="")
     seed = seed if seed is not None else random.randint(1, 2_000_000_000)
     return f"{POLLINATIONS_BASE}{q}?width={width}&height={height}&nologo=true&seed={seed}"
+
+
+# Pollinations' rate-limit placeholder pictures ("Busy right now" / "Free limit reached").
+PLACEHOLDER_SHA256 = {
+    "116b73d9224bb6a5a503addf0105616b8efb60996a54acc1e40909c3f2f18ec1",
+    "5b0c323c4889eeb9809c928cba3606c897a36fb3a17b0dc6caf225913b72a82d",
+}
+
+
+def is_placeholder(data: bytes) -> bool:
+    """True for Pollinations' 'busy / free limit' notice images (known hash, or the cream text panel)."""
+    import hashlib
+
+    if hashlib.sha256(data).hexdigest() in PLACEHOLDER_SHA256:
+        return True
+    try:
+        from PIL import Image
+
+        im = Image.open(io.BytesIO(data)).convert("RGB").resize((64, 64))
+        band = [im.getpixel((x, y)) for y in range(48, 64) for x in range(64)]
+        cream = sum(1 for r, g, b in band if r > 232 and g > 226 and b > 212 and max(r, g, b) - min(r, g, b) < 30)
+        dark = sum(1 for r, g, b in band if r + g + b < 240)
+        return cream / len(band) > 0.75 and 0.005 < dark / len(band) < 0.2
+    except Exception:
+        return False
+
+
+def english_image_prompt(api_key: str, model: str, text: str) -> str:
+    """Translate/expand a (Bengali or mixed) image request into an English image-generation prompt."""
+    text = (text or "").strip()
+    if not text or not api_key or text.isascii():
+        return text
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": (
+            "Rewrite the following image request as ONE detailed English prompt for an AI image generator "
+            "(subject, style, composition, lighting, colors). Keep any text the user wants written in the image "
+            "in its original language inside quotes. Reply with the prompt only.\n\nRequest: " + text[:1200])}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 300},
+    }
+    for m in dict.fromkeys([model, "gemini-3.5-flash-lite", "gemini-3-flash-preview"]):
+        try:
+            status, obj = _http_json("POST", f"{NATIVE_BASE}/{m}:generateContent", {"x-goog-api-key": api_key},
+                                     body, timeout=15)
+            if status == 200:
+                parts = ((obj.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+                out = "".join(p.get("text") or "" for p in parts if not p.get("thought")).strip().strip('"')
+                if out:
+                    return out[:900]
+            logger.warning("english_image_prompt %s HTTP %s", m, status)
+        except Exception as exc:
+            logger.warning("english_image_prompt %s failed: %s", m, type(exc).__name__)
+    return text
 
 
 def _is_image(data: bytes) -> bool:
@@ -263,8 +320,9 @@ def pollinations_image(prompt: str, width: int = 1024, height: int = 1024, attem
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = resp.read()
-            if resp.status == 200 and _is_image(data):
+            if resp.status == 200 and _is_image(data) and not is_placeholder(data):
                 return data
+            logger.warning("Pollinations returned a placeholder/non-image (attempt %s)", attempt + 1)
         except urllib.error.HTTPError as exc:
             try:
                 wait = float(exc.headers.get("Retry-After") or wait)

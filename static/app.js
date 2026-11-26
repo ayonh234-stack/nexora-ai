@@ -1,312 +1,357 @@
-/* Nexora AI — frontend */
+/* Nexora AI — ChatGPT-style frontend (one chat box; the AI decides text / image / video / photo edit / voice) */
 (() => {
   "use strict";
   const API = (window.NEXORA_API_BASE || "").replace(/\/$/, "");
   const $ = (s) => document.querySelector(s);
-  const LS_CHATS = "nexora.chats.v1", LS_CUR = "nexora.current.v1", LS_LANG = "nexora.lang", LS_SID = "nexora.sid";
+  const LS_CHATS = "nexora.chats.v2", LS_OLD = "nexora.chats.v1", LS_CUR = "nexora.current.v2", LS_LANG = "nexora.lang", LS_SID = "nexora.sid", LS_THEME = "nexora.theme";
 
   const T = {
     bn: {
-      newChat: "নতুন চ্যাট", server: "সার্ভার URL", install: "অ্যাপ ইনস্টল", clearAll: "সব ইতিহাস মুছুন", leadTitle: "ফ্রি গ্রোথ কনসালটেশন",
-      leadSub: "তথ্য দিন, Md Zahngir Hossain নিজে যোগাযোগ করবেন।", fName: "নাম", fIg: "Instagram handle", fBudget: "বাজেট",
-      fContact: "যোগাযোগ (Email / WhatsApp / Telegram)", cancel: "বাতিল", submit: "পাঠান",
-      placeholder: { chat: "Nexora-কে কিছু জিজ্ঞেস করুন…", caption: "পোস্টের বিষয়/নিশ লিখুন, ক্যাপশন বানিয়ে দেব…", growth: "আপনার Instagram/TikTok গ্রোথ নিয়ে জিজ্ঞেস করুন…", image: "কীসের ছবি চান? যেমন: নীল পদ্ম, সূর্যাস্তে…", video: "কীসের ভিডিও চান? যেমন: একটি লাল আপেল ঘুরছে" },
-      hint: { chat: "📷 ছবি পাঠান + লিখুন “ব্যাকগ্রাউন্ড বদলাও…” · 🎤 ভয়েসে বলুন, ভয়েসে উত্তর · বাংলা বা English", caption: "ক্যাপশন, হ্যাশট্যাগ, রিল আইডিয়া", growth: "SocialGrowthLab · অর্গানিক গ্রোথ, কোনো ফেক ফলোয়ার নয়", image: "ফ্রি AI ছবি · ১০–৪০ সেকেন্ড লাগতে পারে", video: "ফ্রি ২ সেকেন্ডের ক্লিপ · দিনে সীমিত · ২০–৯০ সেকেন্ড" },
-      welcomeTitle: "আমি Nexora AI", welcomeSub: "ব্যবসা, মার্কেটিং, কনটেন্ট, রিসার্চ আর দৈনন্দিন কাজে আপনার অল-ইন-ওয়ান AI সহকারী।",
-      leadBtn: "📝 ফ্রি কনসালটেশন ফর্ম", copied: "কপি হয়েছে", copy: "কপি", del: "মুছুন", download: "ডাউনলোড",
-      imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", photoQ: "ছবি নিয়ে প্রশ্ন, বা এডিট: যেমন “ব্যাকগ্রাউন্ড বদলে সমুদ্র সৈকত করো”",
-      leadThanks: "ধন্যবাদ! আপনার তথ্য পৌঁছে গেছে, Md Zahngir Hossain শিগগিরই যোগাযোগ করবেন।", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।",
-      confirmClear: "সব চ্যাট ইতিহাস মুছে ফেলবেন?", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", offline: "আপনি অফলাইনে আছেন",
-      modes: { chat: "চ্যাট", caption: "কনটেন্ট", growth: "গ্রোথ", image: "ছবি", video: "ভিডিও" },
+      newChat: "নতুন চ্যাট", search: "চ্যাট খুঁজুন", theme: "থিম (লাইট/ডার্ক)", server: "সার্ভার URL", install: "অ্যাপ ইনস্টল", clearAll: "সব চ্যাট মুছুন",
+      leadBtn: "ফ্রি গ্রোথ কনসালটেশন", leadTitle: "ফ্রি গ্রোথ কনসালটেশন", leadSub: "তথ্য দিন, Md Zahngir Hossain নিজে যোগাযোগ করবেন।",
+      fName: "নাম", fIg: "Instagram handle", fBudget: "বাজেট", fContact: "যোগাযোগ (Email / WhatsApp / Telegram)", cancel: "বাতিল", submit: "পাঠান",
+      placeholder: "Nexora-কে কিছু জিজ্ঞেস করুন", photoQ: "ছবি নিয়ে প্রশ্ন, বা এডিট: যেমন “ব্যাকগ্রাউন্ড সরাও”",
+      hello: "আজ কীভাবে সাহায্য করতে পারি?", helloSub: "প্রশ্ন করুন, ক্যাপশন লেখান, ছবি বানান, ছবি এডিট করান বা 🎤 চেপে কথা বলুন — সব এক জায়গায়।",
+      disclaimer: "Nexora AI ভুল করতে পারে। গুরুত্বপূর্ণ তথ্য যাচাই করে নিন।",
+      copy: "কপি", copied: "কপি হয়েছে", regen: "আবার লিখুন", listen: "শুনুন", download: "ডাউনলোড", rename: "নাম বদলান", del: "মুছুন",
+      today: "আজ", yesterday: "গতকাল", week: "গত ৭ দিন", older: "আগের", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", noMatch: "কিছু পাওয়া যায়নি",
+      confirmClear: "সব চ্যাট মুছে ফেলবেন?", confirmDel: "এই চ্যাটটি মুছবেন?", offline: "আপনি অফলাইনে আছেন", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।",
+      imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", editing: "ছবি দেখছি / এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
+      busy: "ফ্রি ছবি-সার্ভার ব্যস্ত, {s} সেকেন্ড পরে আবার চেষ্টা করছি…", altServer: "বিকল্প ফ্রি সার্ভারে চেষ্টা করছি…",
+      allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।",
+      bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।",
+      rec: "রেকর্ড হচ্ছে… থামাতে 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।",
+      voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…",
+      cutFail: "দুঃখিত, ফ্রি ব্যাকগ্রাউন্ড-রিমুভ সার্ভারগুলো এখন ব্যস্ত, তাই ছবিটা বদলানো হয়নি। এক মিনিট পরে আবার চেষ্টা করুন।",
+      leadThanks: "ধন্যবাদ! আপনার তথ্য পৌঁছে গেছে, Md Zahngir Hossain শিগগিরই যোগাযোগ করবেন।", photo: "📷 ছবি",
+      chips: [["ইনস্টাগ্রাম ক্যাপশন", "আমার কফি শপের নতুন লাতে নিয়ে ৩টি ইনস্টাগ্রাম ক্যাপশন লিখে দাও"], ["ছবি বানাও", "একটা ইনস্টাগ্রাম পোস্টের ছবি বানাও: গোলাপি ব্যাকগ্রাউন্ডে স্ট্রবেরি আইসক্রিম কোন"],
+        ["ব্যবসার পরিকল্পনা", "অনলাইনে নতুন কাপড়ের ব্যবসা শুরু করতে ৩০ দিনের মার্কেটিং প্ল্যান দাও"], ["ইনস্টাগ্রাম গ্রোথ", "আমার ইনস্টাগ্রাম অর্গানিকভাবে গ্রো করতে চাই, কীভাবে শুরু করব?"]],
     },
     en: {
-      newChat: "New chat", server: "Server URL", install: "Install app", clearAll: "Clear all history", leadTitle: "Free growth consultation",
-      leadSub: "Share your details and Md Zahngir Hossain will reach out personally.", fName: "Name", fIg: "Instagram handle", fBudget: "Budget",
-      fContact: "Contact (Email / WhatsApp / Telegram)", cancel: "Cancel", submit: "Send",
-      placeholder: { chat: "Ask Nexora anything…", caption: "Describe your post or niche for captions…", growth: "Ask about growing your Instagram/TikTok…", image: "Describe an image, e.g. a blue lotus at sunset", video: "Describe a clip, e.g. a red apple spinning" },
-      hint: { chat: "📷 photo + “change background to…” · 🎤 speak and get a voice reply · Bengali or English", caption: "Captions, hashtags, reel ideas", growth: "SocialGrowthLab · organic growth, no fake followers", image: "Free AI images · may take 10–40s", video: "Free 2-second clips · daily limit · 20–90s" },
-      welcomeTitle: "I'm Nexora AI", welcomeSub: "Your all-in-one AI assistant for business, marketing, content, research and everyday life.",
-      leadBtn: "📝 Free consultation form", copied: "Copied", copy: "Copy", del: "Delete", download: "Download",
-      imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", photoQ: "Ask about the photo, or edit it: e.g. “change the background to a beach”",
-      leadThanks: "Thank you! Your details were sent — Md Zahngir Hossain will contact you soon.", netErr: "Network problem, please try again.",
-      confirmClear: "Delete all chat history?", untitled: "New chat", noHistory: "No chats yet", offline: "You are offline",
-      modes: { chat: "Chat", caption: "Content", growth: "Growth", image: "Image", video: "Video" },
+      newChat: "New chat", search: "Search chats", theme: "Theme (light/dark)", server: "Server URL", install: "Install app", clearAll: "Delete all chats",
+      leadBtn: "Free growth consultation", leadTitle: "Free growth consultation", leadSub: "Share your details and Md Zahngir Hossain will reach out personally.",
+      fName: "Name", fIg: "Instagram handle", fBudget: "Budget", fContact: "Contact (Email / WhatsApp / Telegram)", cancel: "Cancel", submit: "Send",
+      placeholder: "Message Nexora AI", photoQ: "Ask about the photo, or edit it: e.g. “remove the background”",
+      hello: "How can I help you today?", helloSub: "Ask anything, get captions, create images, edit photos or tap 🎤 to talk — all in one place.",
+      disclaimer: "Nexora AI can make mistakes. Check important info.",
+      copy: "Copy", copied: "Copied", regen: "Regenerate", listen: "Listen", download: "Download", rename: "Rename", del: "Delete",
+      today: "Today", yesterday: "Yesterday", week: "Previous 7 days", older: "Older", untitled: "New chat", noHistory: "No chats yet", noMatch: "No matches",
+      confirmClear: "Delete all chats?", confirmDel: "Delete this chat?", offline: "You are offline", netErr: "Network problem, please try again.",
+      imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", editing: "Looking at / editing your photo…", bgMaking: "Creating the new background…",
+      busy: "Free image server is busy, retrying in {s}s…", altServer: "Trying a backup free server…",
+      allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.",
+      bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.",
+      rec: "Recording… tap 🎤 to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.",
+      voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…",
+      cutFail: "Sorry, the free background-removal servers are busy right now, so the photo was NOT changed. Please try again in a minute.",
+      leadThanks: "Thank you! Your details were sent — Md Zahngir Hossain will contact you soon.", photo: "📷 Photo",
+      chips: [["Instagram captions", "Write 3 Instagram captions for my coffee shop's new latte"], ["Create an image", "Make an image for an Instagram post: a strawberry ice cream cone on a pink background"],
+        ["Business plan", "Give me a 30-day marketing plan to launch an online clothing store"], ["Instagram growth", "I want to grow my Instagram organically — where do I start?"]],
     },
   };
-  const MODE_ICONS = { chat: "💬", caption: "✍️", growth: "🚀", image: "🎨", video: "🎬" };
-  const SUGGEST = {
-    chat: [["Business", "আমার অনলাইন ব্যবসার জন্য ৫টা মার্কেটিং আইডিয়া দাও"], ["Productivity", "Plan my week to balance clients and content"], ["Research", "ক্লায়েন্ট হান্টিং কীভাবে শুরু করব?"], ["Write", "Write a polite follow-up email to a client"]],
-    caption: [["Instagram", "কফি শপের নতুন লাতের জন্য ক্যাপশন"], ["TikTok", "Hooks for a fitness coach reel"], ["Hashtags", "Hashtags for a Dhaka fashion boutique"], ["Calendar", "৭ দিনের কনটেন্ট প্ল্যান, বেকারি ব্যবসা"]],
-    growth: [["Service", "SocialGrowthLab কীভাবে কাজ করে?"], ["Pricing", "How much does organic growth cost?"], ["Trust", "Do you use bots or fake followers?"], ["Start", "আমি আমার Instagram গ্রো করতে চাই"]],
-    image: [["Logo idea", "minimal modern logo for a coffee brand, flat vector"], ["Product", "luxury perfume bottle on black marble, studio light"], ["Art", "নীল পদ্ম ফুল, সূর্যাস্তের আলোয়, ডিজিটাল আর্ট"], ["Social", "Instagram post background, pastel gradient, abstract"]],
-    video: [["Nature", "ocean waves at sunset, cinematic"], ["Product", "a red apple spinning slowly on a table"], ["City", "rainy neon city street at night"], ["Fun", "একটি বিড়াল জানালার পাশে বসে আছে"]],
+  const ICON = {
+    copy: '<svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></svg>',
+    regen: '<svg class="ico" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/></svg>',
+    listen: '<svg class="ico" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg>',
+    down: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    edit: '<svg class="ico" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>',
+    trash: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   };
 
-  let lang = localStorage.getItem(LS_LANG) || ((navigator.language || "").startsWith("bn") ? "bn" : "bn");
+  let lang = localStorage.getItem(LS_LANG) || "bn";
   let sid = localStorage.getItem(LS_SID);
   if (!sid) { sid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/[^a-z0-9-]/gi, ""); localStorage.setItem(LS_SID, sid); }
   let chats = load();
   let current = localStorage.getItem(LS_CUR);
-  let mode = "chat";
-  let busy = false;
-  let pendingPhoto = null;
-  let deferredInstall = null;
-  const audioCache = new Map(); // message id -> data: URL (kept in memory only, never in localStorage)
-  const VT = {
-    bn: { busy: "ফ্রি ছবি-সার্ভার ব্যস্ত, {s} সেকেন্ড পরে আবার চেষ্টা করছি…", altServer: "বিকল্প ফ্রি সার্ভারে চেষ্টা করছি…", allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।", editing: "ছবি এডিট হচ্ছে (২০–৬০ সেকেন্ড)…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…", bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।", listen: "শুনুন", rec: "রেকর্ড হচ্ছে… থামাতে আবার 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।", voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…" },
-    en: { busy: "Free image server is busy, retrying in {s}s…", altServer: "Trying a backup free server…", allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.", editing: "Editing your photo (20–60s)…", bgMaking: "Creating the new background…", bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.", listen: "Listen", rec: "Recording… tap 🎤 again to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.", voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…" },
-  };
-  function vt(k) { return (VT[lang] || VT.bn)[k]; }
-
+  let busy = false, pendingPhoto = null, deferredInstall = null, query = "";
+  const audioCache = new Map();
   const els = {
-    messages: $("#messages"), input: $("#input"), form: $("#composer"), send: $("#sendBtn"), modes: $("#modes"),
-    hint: $("#hint"), drawer: $("#drawer"), scrim: $("#scrim"), history: $("#historyList"), photoInput: $("#photoInput"),
-    photoPreview: $("#photoPreview"), photoThumb: $("#photoThumb"), toast: $("#toast"), mic: $("#micBtn"), leadDialog: $("#leadDialog"), leadForm: $("#leadForm"),
+    layout: $("#layout"), scroller: $("#scroller"), thread: $("#thread"), input: $("#input"), form: $("#composer"), send: $("#sendBtn"),
+    mic: $("#micBtn"), recStatus: $("#recStatus"), history: $("#history"), search: $("#search"), photoInput: $("#photoInput"),
+    photoPreview: $("#photoPreview"), photoThumb: $("#photoThumb"), toast: $("#toast"), leadDialog: $("#leadDialog"), leadForm: $("#leadForm"),
   };
+  const t = (k) => (T[lang] || T.bn)[k];
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function t(k) { return T[lang][k]; }
-  function load() { try { return JSON.parse(localStorage.getItem(LS_CHATS)) || {}; } catch { return {}; } }
+  // ------------------------------------------------ storage
+  function load() {
+    try {
+      const v2 = JSON.parse(localStorage.getItem(LS_CHATS));
+      if (v2) return v2;
+      const v1 = JSON.parse(localStorage.getItem(LS_OLD)) || {}; // migrate chats from the old UI
+      Object.values(v1).forEach((c) => { c.messages = (c.messages || []).filter((m) => !m.pending); });
+      return v1;
+    } catch { return {}; }
+  }
   function save() {
-    // keep newest 40 chats, 120 messages each
     const ids = Object.keys(chats).sort((a, b) => chats[b].updated - chats[a].updated);
-    ids.slice(40).forEach((id) => delete chats[id]);
-    ids.slice(0, 40).forEach((id) => { chats[id].messages = chats[id].messages.slice(-120); });
-    try { localStorage.setItem(LS_CHATS, JSON.stringify(chats)); }
-    catch { // quota: strip embedded photo previews
-      Object.values(chats).forEach((c) => c.messages.forEach((m) => {
-        if (m.photo && m.photo.startsWith("data:")) m.photo = "";
-        if (m.url && m.url.startsWith("data:") && (m.type === "image" || m.type === "video")) { m.content = (m.type === "video" ? "🎬 " : "🖼️ ") + (m.prompt || ""); m.url = ""; m.type = ""; }
-      }));
-      try { localStorage.setItem(LS_CHATS, JSON.stringify(chats)); } catch {}
+    ids.slice(80).forEach((id) => delete chats[id]);
+    Object.values(chats).forEach((c) => { c.messages = c.messages.slice(-150); });
+    const persist = () => localStorage.setItem(LS_CHATS, JSON.stringify(chats, (k, v) => (k === "pending" || k === "autoplay" ? undefined : v)));
+    try { persist(); }
+    catch { // quota: strip big inline media, oldest chats first
+      const order = Object.values(chats).sort((a, b) => a.updated - b.updated);
+      for (const c of order) {
+        c.messages.forEach((m) => {
+          if (m.photo && m.photo.startsWith("data:")) m.photo = "";
+          if (m.url && m.url.startsWith("data:")) { m.content = (m.type === "video" ? "🎬 " : "🖼️ ") + (m.prompt || ""); m.url = ""; m.type = ""; }
+        });
+        try { persist(); break; } catch {}
+      }
     }
     if (current) localStorage.setItem(LS_CUR, current);
   }
   function chat() {
-    if (!current || !chats[current]) {
-      current = "c" + Date.now().toString(36);
-      chats[current] = { id: current, title: "", mode, messages: [], updated: Date.now() };
-    }
+    if (!current || !chats[current]) { current = "c" + uid(); chats[current] = { id: current, title: "", messages: [], updated: Date.now() }; }
     return chats[current];
   }
-  function toast(msg) {
-    els.toast.textContent = msg; els.toast.classList.add("show");
-    clearTimeout(toast._t); toast._t = setTimeout(() => els.toast.classList.remove("show"), 2600);
-  }
-  function md(text) {
-    const html = marked.parse(text || "", { breaks: true, gfm: true });
-    return DOMPurify.sanitize(html, { ADD_ATTR: ["target"] });
-  }
-  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
-  function url(u) { return u && u.startsWith("/") ? API + u : u; }
 
-  // ------------------------------------------------ rendering
+  // ------------------------------------------------ helpers
+  function toast(msg) { els.toast.textContent = msg; els.toast.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => els.toast.classList.remove("show"), 2600); }
+  function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+  function url(u) { return u && u.startsWith("/") ? API + u : u; }
+  function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
+  async function api(path, opts) { return fetch(API + path, opts); }
+  async function errText(res) { try { const j = await res.json(); return typeof j.detail === "string" ? j.detail : t("netErr"); } catch { return t("netErr"); } }
+  const nearBottom = () => els.scroller.scrollHeight - els.scroller.scrollTop - els.scroller.clientHeight < 140;
+  function scrollEnd(force) { if (force || nearBottom()) requestAnimationFrame(() => { els.scroller.scrollTop = els.scroller.scrollHeight; }); }
+
+  // ------------------------------------------------ i18n / theme
   function applyI18n() {
     document.documentElement.lang = lang;
     document.querySelectorAll("[data-i18n]").forEach((el) => { const v = t(el.dataset.i18n); if (typeof v === "string") el.textContent = v; });
     $("#langLabel").textContent = lang === "bn" ? "English" : "বাংলা";
-    renderModes(); updateComposer(); renderHistory();
-    if (!chat().messages.length) renderMessages();
+    els.search.placeholder = t("search"); $("#disclaimer").textContent = t("disclaimer");
+    if (!pendingPhoto) els.input.placeholder = t("placeholder");
+    renderHistory(); if (!chat().messages.length) renderThread();
   }
-  function renderModes() {
-    els.modes.innerHTML = "";
-    Object.keys(MODE_ICONS).forEach((m) => {
-      const b = document.createElement("button");
-      b.className = "mode" + (m === mode ? " active" : ""); b.type = "button"; b.setAttribute("role", "tab");
-      b.innerHTML = `<span>${MODE_ICONS[m]}</span><span>${t("modes")[m]}</span>`;
-      b.onclick = () => setMode(m);
-      els.modes.appendChild(b);
-    });
+  function setTheme(th) { document.documentElement.dataset.theme = th; localStorage.setItem(LS_THEME, th); document.querySelector('meta[name="theme-color"]').content = th === "light" ? "#ffffff" : "#212121"; }
+
+  // ------------------------------------------------ sidebar
+  const isMobile = () => matchMedia("(max-width: 860px)").matches;
+  function openSide() { if (isMobile()) els.layout.classList.add("side-open"); else els.layout.classList.toggle("side-closed"); }
+  function closeSide() { els.layout.classList.remove("side-open"); }
+  function groupOf(ts) {
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0); const day = 86400000;
+    if (ts >= d0.getTime()) return "today"; if (ts >= d0.getTime() - day) return "yesterday"; if (ts >= d0.getTime() - 7 * day) return "week"; return "older";
   }
-  function setMode(m) {
-    mode = m; const c = chat(); c.mode = m;
-    renderModes(); updateComposer();
-    if (!c.messages.length) renderMessages();
-    els.input.focus({ preventScroll: true });
-  }
-  function updateComposer() {
-    els.input.placeholder = t("placeholder")[mode];
-    els.hint.textContent = t("hint")[mode];
-  }
-  function renderWelcome() {
-    const w = document.createElement("div"); w.className = "welcome";
-    w.innerHTML = `<img class="logo" src="/icons/icon.svg" alt=""><h2>${esc(t("welcomeTitle"))}</h2><p>${esc(t("welcomeSub"))}</p>
-      <p style="margin-top:6px;font-weight:600;color:#c4b5fd">Your AI. Your Business. Your World.</p><div class="cards"></div>`;
-    const cards = w.querySelector(".cards");
-    SUGGEST[mode].forEach(([title, text]) => {
-      const c = document.createElement("button"); c.className = "card"; c.type = "button";
-      c.innerHTML = `<b>${MODE_ICONS[mode]} ${esc(title)}</b>${esc(text)}`;
-      c.onclick = () => { els.input.value = text; submit(); };
-      cards.appendChild(c);
-    });
-    if (mode === "growth") {
-      const b = document.createElement("button"); b.className = "primary-btn lead-cta"; b.type = "button"; b.textContent = t("leadBtn");
-      b.onclick = openLead; w.appendChild(b);
-    }
-    els.messages.appendChild(w);
-  }
-  function renderMessages() {
-    els.messages.innerHTML = "";
-    const c = chat();
-    if (!c.messages.length) renderWelcome();
-    c.messages.forEach((m, i) => { const e = msgEl(m, i); e.classList.add("still"); els.messages.appendChild(e); });
-    scrollEnd(false);
-  }
-  function msgEl(m, idx) {
-    const row = document.createElement("div");
-    row.className = "msg " + (m.role === "user" ? "user" : "bot");
-    if (m.role !== "user") row.innerHTML = `<img class="avatar" src="/icons/icon.svg" alt="">`;
-    const b = document.createElement("div"); b.className = "bubble"; row.appendChild(b);
-    fillBubble(b, m);
-    if (m.role !== "user" && !m.pending && (m.content || m.url)) {
-      const tools = document.createElement("div"); tools.className = "msg-tools";
-      if (m.content) {
-        const cp = document.createElement("button"); cp.textContent = "📋 " + t("copy");
-        cp.onclick = () => navigator.clipboard?.writeText(m.content).then(() => toast(t("copied")));
-        tools.appendChild(cp);
-        if (!m.error && !(m.aid && audioCache.has(m.aid))) {
-          const sp = document.createElement("button"); sp.textContent = "🔊 " + vt("listen");
-          sp.onclick = () => speak(m, row, sp);
-          tools.appendChild(sp);
-        }
-      }
-      b.appendChild(tools);
-    }
-    return row;
-  }
-  function fillBubble(b, m) {
-    if (m.role === "user") {
-      b.innerHTML = "";
-      if (m.photo) { const im = document.createElement("img"); im.className = "upload"; im.src = m.photo; im.alt = "photo"; b.appendChild(im); }
-      if (m.content) b.appendChild(document.createTextNode(m.content));
-      return;
-    }
-    if (m.pending && !m.content) {
-      b.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>${m.progress ? `<div class="progress">${esc(m.progress)}</div>` : ""}`;
-      return;
-    }
-    if (m.type === "image" && m.url) {
-      b.innerHTML = `<img class="gen" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer" onerror="if(!this.dataset.r){this.dataset.r=1;setTimeout(()=>{this.src=this.src+'&r=1'},3000)}"><div class="media-actions"><a href="${esc(url(m.url))}" download="${esc(m.fname || "nexora.jpg")}" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">${m.fname ? "✅" : "🎨"} ${esc(m.prompt)}</div>` : ""}`;
-      if (m.fname && m.fname.endsWith(".png")) b.querySelector("img.gen").classList.add("checker");
-      return;
-    }
-    if (m.type === "video" && m.url) {
-      b.innerHTML = `<video class="gen" src="${esc(url(m.url))}" controls autoplay loop muted playsinline></video><div class="media-actions"><a href="${esc(url(m.url))}" download="nexora.mp4" target="_blank" rel="noopener">⬇ ${t("download")}</a></div>${m.prompt ? `<div class="progress">🎬 ${esc(m.prompt)}</div>` : ""}`;
-      return;
-    }
-    b.innerHTML = md(m.content);
-    b.querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
-    if (m.error) b.classList.add("err");
-    if (m.aid && audioCache.has(m.aid)) addAudio(b, audioCache.get(m.aid), m.autoplay);
-  }
-  function addAudio(b, src, autoplay) {
-    const a = document.createElement("audio"); a.className = "voice-audio"; a.controls = true; a.preload = "auto"; a.src = src;
-    b.prepend(a);
-    if (autoplay) { a.play().catch(() => {}); }
-    return a;
-  }
-  async function speak(m, row, btn) {
-    btn.disabled = true; const old = btn.textContent; btn.textContent = "⏳ " + vt("ttsWait");
-    try {
-      const res = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: m.content.slice(0, 6000) }) });
-      if (!res.ok) throw new Error(await errText(res));
-      const j = await res.json();
-      m.aid = m.aid || "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      audioCache.set(m.aid, j.audio);
-      addAudio(row.querySelector(".bubble"), j.audio, true);
-      btn.remove();
-    } catch (e) { toast(e.message || t("netErr")); btn.disabled = false; btn.textContent = old; }
-  }
-  function scrollEnd(smooth = true) { requestAnimationFrame(() => els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: smooth ? "smooth" : "auto" })); }
   function renderHistory() {
     els.history.innerHTML = "";
-    const list = Object.values(chats).filter((c) => c.messages.length).sort((a, b) => b.updated - a.updated);
-    if (!list.length) { els.history.innerHTML = `<div class="empty-h">${esc(t("noHistory"))}</div>`; return; }
+    const q = query.trim().toLowerCase();
+    let list = Object.values(chats).filter((c) => c.messages.length).sort((a, b) => b.updated - a.updated);
+    if (q) list = list.filter((c) => (c.title || "").toLowerCase().includes(q) || c.messages.some((m) => (m.content || "").toLowerCase().includes(q)));
+    if (!list.length) { els.history.innerHTML = `<div class="h-empty">${esc(q ? t("noMatch") : t("noHistory"))}</div>`; return; }
+    let last = "";
     list.forEach((c) => {
-      const it = document.createElement("div"); it.className = "h-item" + (c.id === current ? " active" : "");
-      it.innerHTML = `<span>${MODE_ICONS[c.mode] || "💬"}</span><span class="t">${esc(c.title || t("untitled"))}</span><button aria-label="${t("del")}">🗑</button>`;
+      const g = groupOf(c.updated);
+      if (g !== last) { const h = document.createElement("div"); h.className = "h-group"; h.textContent = t(g); els.history.appendChild(h); last = g; }
+      const it = document.createElement("div"); it.className = "h-item" + (c.id === current ? " active" : ""); it.dataset.id = c.id;
+      it.innerHTML = `<span class="t">${esc(c.title || t("untitled"))}</span><button class="h-act ren" title="${esc(t("rename"))}" aria-label="${esc(t("rename"))}">${ICON.edit}</button><button class="h-act del" title="${esc(t("del"))}" aria-label="${esc(t("del"))}">${ICON.trash}</button>`;
       it.onclick = (e) => {
-        if (e.target.tagName === "BUTTON") { delete chats[c.id]; if (current === c.id) current = null; save(); renderHistory(); if (!current) newChat(); return; }
-        current = c.id; mode = c.mode || "chat"; save(); renderModes(); updateComposer(); renderMessages(); renderHistory(); closeDrawer();
+        if (e.target.closest(".del")) { if (confirm(t("confirmDel"))) { delete chats[c.id]; if (current === c.id) { current = null; renderThread(); } save(); renderHistory(); } return; }
+        if (e.target.closest(".ren")) { renameChat(it, c); return; }
+        if (e.target.tagName === "INPUT") return;
+        current = c.id; save(); renderThread(true); renderHistory(); closeSide();
       };
       els.history.appendChild(it);
     });
   }
-  function newChat() {
-    current = null; chat(); save(); renderMessages(); renderHistory(); closeDrawer(); els.input.focus({ preventScroll: true });
+  function renameChat(it, c) {
+    const span = it.querySelector(".t"); const inp = document.createElement("input"); inp.value = c.title || ""; inp.maxLength = 80;
+    span.replaceWith(inp); inp.focus(); inp.select();
+    const done = (ok) => { if (ok && inp.value.trim()) { c.title = inp.value.trim(); c.renamed = true; save(); } renderHistory(); };
+    inp.onkeydown = (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
+    inp.onblur = () => done(true);
+  }
+  function newChat() { current = null; chat(); renderThread(); renderHistory(); closeSide(); clearPhoto(); els.input.focus({ preventScroll: true }); }
+
+  // ------------------------------------------------ thread rendering
+  function renderEmpty() {
+    const w = document.createElement("div"); w.className = "empty";
+    w.innerHTML = `<img class="logo" src="/icons/icon.svg" alt=""><h2>${esc(t("hello"))}</h2><p>${esc(t("helloSub"))}</p><div class="chips"></div>`;
+    t("chips").forEach(([title, text]) => {
+      const b = document.createElement("button"); b.className = "chip"; b.type = "button";
+      b.innerHTML = `<b>${esc(title)}</b><span>${esc(text)}</span>`;
+      b.onclick = () => { els.input.value = text; autosize(); submit(); };
+      w.querySelector(".chips").appendChild(b);
+    });
+    els.thread.appendChild(w);
+  }
+  function renderThread(toBottom) {
+    els.thread.innerHTML = "";
+    const c = chat();
+    if (!c.messages.length) renderEmpty();
+    c.messages.forEach((m) => { const e = msgEl(m); e.classList.add("still"); els.thread.appendChild(e); });
+    if (toBottom !== false) scrollEnd(true);
+  }
+  function isLastBot(m) { const ms = chat().messages; return ms[ms.length - 1] === m; }
+  function msgEl(m) {
+    const row = document.createElement("div"); row.className = "msg " + (m.role === "user" ? "user" : "bot");
+    if (m.role === "user") {
+      const b = document.createElement("div"); b.className = "bubble";
+      if (m.photo) { const im = document.createElement("img"); im.className = "upload"; im.src = m.photo; im.alt = "photo"; row.appendChild(im); }
+      if (m.content) { b.textContent = m.content; row.appendChild(b); }
+      return row;
+    }
+    row.innerHTML = `<img class="avatar" src="/icons/icon.svg" alt="">`;
+    const body = document.createElement("div"); body.className = "body"; row.appendChild(body);
+    fillBody(body, m);
+    return row;
+  }
+  function fillBody(body, m) {
+    body.innerHTML = "";
+    if (m.pending && !m.content) {
+      body.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>${m.progress ? `<div class="progress">${esc(m.progress)}</div>` : ""}`;
+      return;
+    }
+    if ((m.type === "image" || m.type === "video") && m.url) {
+      const media = m.type === "image"
+        ? `<img class="gen${m.fname && m.fname.endsWith(".png") ? " checker" : ""}" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer">`
+        : `<video class="gen" src="${esc(url(m.url))}" controls autoplay loop muted playsinline></video>`;
+      body.innerHTML = (m.content ? `<div class="md">${md(m.content)}</div>` : "") + media + (m.prompt ? `<div class="progress">${m.fname ? "✅" : m.type === "video" ? "🎬" : "🎨"} ${esc(m.prompt)}</div>` : "");
+    } else {
+      const div = document.createElement("div"); div.className = "md" + (m.error ? " err" : "") + (m.streaming ? " cursor" : "");
+      div.innerHTML = md(m.content); body.appendChild(div);
+      enhanceMd(div);
+    }
+    if (m.type === "image" && /^https?:\/\/image\.pollinations\.ai\//.test(m.url || "")) { // chats saved by older versions
+      const im = body.querySelector("img.gen"); const legacy = m.url; im.removeAttribute("src"); im.style.minHeight = "120px";
+      fetchRealImage(legacy, null, 1).then((du) => {
+        if (du) { m.url = du; im.src = du; save(); }
+        else { m.type = ""; m.url = ""; m.content = "🖼️ " + (m.prompt || ""); m.regen = { kind: "image", prompt: m.prompt || "" }; fillBody(body, m); save(); }
+      });
+    }
+    if (m.aid && audioCache.has(m.aid)) addAudio(body, audioCache.get(m.aid), m.autoplay);
+    if (!m.pending && !m.streaming) body.appendChild(actionsEl(m, body));
+  }
+  function enhanceMd(div) {
+    div.querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
+    div.querySelectorAll("pre").forEach((pre) => {
+      const code = pre.querySelector("code"); if (!code || pre.querySelector(".code-head")) return;
+      const langName = ((code.className || "").match(/language-([\w+#-]+)/) || [])[1] || "code";
+      const head = document.createElement("div"); head.className = "code-head";
+      head.innerHTML = `<span>${esc(langName)}</span><button type="button">${ICON.copy.replace('class="ico"', 'class="ico" style="width:14px;height:14px;vertical-align:-2px"')} ${esc(t("copy"))}</button>`;
+      head.querySelector("button").onclick = () => navigator.clipboard?.writeText(code.innerText).then(() => toast(t("copied")));
+      pre.prepend(head);
+    });
+  }
+  function actionsEl(m, body) {
+    const a = document.createElement("div"); a.className = "actions";
+    const btn = (icon, label, fn) => { const b = document.createElement("button"); b.type = "button"; b.title = label; b.innerHTML = `${icon}<span>${esc(label)}</span>`; b.onclick = fn; a.appendChild(b); return b; };
+    if (m.content && !m.error) btn(ICON.copy, t("copy"), () => navigator.clipboard?.writeText(m.content).then(() => toast(t("copied"))));
+    if (m.url && (m.type === "image" || m.type === "video")) {
+      const d = document.createElement("a"); d.href = url(m.url); d.download = m.fname || (m.type === "video" ? "nexora.mp4" : "nexora.jpg"); d.target = "_blank"; d.rel = "noopener";
+      d.innerHTML = `${ICON.down}<span>${esc(t("download"))}</span>`; a.appendChild(d);
+    }
+    if (m.content && !m.error && !(m.aid && audioCache.has(m.aid)) && !m.type) {
+      const sp = btn(ICON.listen, t("listen"), () => speak(m, body, sp));
+    }
+    if (isLastBot(m) && !busy && (m.regen || m.error)) btn(ICON.regen, t("regen"), () => regenerate(m));
+    return a;
+  }
+  function addAudio(body, src, autoplay) {
+    const au = document.createElement("audio"); au.className = "voice-audio"; au.controls = true; au.preload = "auto"; au.src = src;
+    body.prepend(au); if (autoplay) au.play().catch(() => {}); return au;
   }
 
   // ------------------------------------------------ messaging
   function push(m) {
-    const c = chat(); c.messages.push(m); c.updated = Date.now();
-    if (!c.title && m.role === "user") c.title = (m.content || "📷 Photo").slice(0, 60);
-    if (c.messages.length === 1) els.messages.innerHTML = "";
-    const el = msgEl(m, c.messages.length - 1); els.messages.appendChild(el);
-    save(); renderHistory(); scrollEnd();
+    const c = chat(); m.id = m.id || uid(); c.messages.push(m); c.updated = Date.now();
+    if (!c.renamed && m.role === "user" && (!c.title || c.title === t("photo"))) c.title = autoTitle(m);
+    if (c.messages.length === 1) els.thread.innerHTML = "";
+    const el = msgEl(m); els.thread.appendChild(el);
+    save(); renderHistory(); scrollEnd(true);
     return { m, el };
   }
-  function refresh(ref) {
-    const nel = msgEl(ref.m); nel.classList.add("still"); ref.el.replaceWith(nel); ref.el = nel; save(); scrollEnd();
+  function autoTitle(m) {
+    let s = (m.content || "").replace(/^🎤\s*/, "").replace(/\s+/g, " ").trim();
+    if (!s) return t("photo");
+    if (s.length > 42) s = s.slice(0, 42).replace(/\s+\S*$/, "") + "…";
+    return s;
   }
-  function historyPayload() {
-    return chat().messages.filter((m) => !m.pending && !m.error).slice(-21, -1).map((m) => ({
+  function refresh(ref) { const n = msgEl(ref.m); n.classList.add("still"); ref.el.replaceWith(n); ref.el = n; save(); scrollEnd(); }
+  function refreshPrevActions() { // remove "regenerate" from older answers
+    const rows = els.thread.querySelectorAll(".msg.bot"); rows.forEach((r, i) => { if (i < rows.length - 1) r.querySelectorAll(".actions button").forEach((b) => { if (b.title === t("regen")) b.remove(); }); });
+  }
+  function historyPayload(uptoIndex) {
+    const ms = chat().messages.slice(0, uptoIndex);
+    return ms.filter((m) => !m.pending && !m.error).slice(-20).map((m) => ({
       role: m.role === "user" ? "user" : "assistant",
-      content: m.type === "image" ? `[Generated image: ${m.prompt}]` : m.type === "video" ? `[Generated video: ${m.prompt}]` : (m.photo ? `[photo] ${m.content || ""}` : m.content || ""),
+      content: m.type === "image" ? `[Image shown to the user: ${m.prompt}]` : m.type === "video" ? `[Video shown to the user: ${m.prompt}]` : (m.photo ? `[photo] ${m.content || ""}` : m.content || ""),
     })).filter((m) => m.content.trim());
   }
-  async function errText(res) {
-    try { const j = await res.json(); return typeof j.detail === "string" ? j.detail : t("netErr"); } catch { return t("netErr"); }
-  }
-  async function api(path, opts) {
-    return fetch(API + path, opts);
-  }
 
-  async function sendChat(text) {
-    const bot = push({ role: "assistant", content: "", pending: true });
+  async function sendChat(text, bot) {
+    const c = chat(); const idx = c.messages.indexOf(bot.m);
+    bot.m.regen = { kind: "chat", text };
     try {
-      const res = await api("/api/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode, session_id: sid + ":" + current, history: historyPayload(), stream: true }),
-      });
+      const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true }) });
       if (!res.ok) throw new Error(await errText(res));
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("application/json")) {
         const j = await res.json();
-        if (j.action === "image" || j.action === "video") {
-          bot.m.pending = true; bot.m.content = ""; bot.m.progress = j.action === "image" ? t("imgWait") : t("vidWait"); refresh(bot);
-          return j.action === "image" ? genImage(j.prompt, bot) : genVideo(j.prompt, bot);
-        }
-        bot.m.content = j.reply || ""; bot.m.pending = false; refresh(bot);
-        return;
+        if (j.action) return mediaAction(j.action, j.prompt, bot);
+        Object.assign(bot.m, { content: j.reply || "", pending: false }); refresh(bot); return;
       }
-      // SSE stream
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", acc = "";
-      let lastPaint = 0;
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", acc = "", lastPaint = 0, action = null;
+      const md_ = () => bot.el.querySelector(".md");
       for (;;) {
         const { value, done } = await reader.read(); if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let idx;
-        while ((idx = buf.indexOf("\n\n")) >= 0) {
-          const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 2);
+        buf += dec.decode(value, { stream: true }); let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
           if (!line.startsWith("data:")) continue;
           const ev = JSON.parse(line.slice(5));
           if (ev.delta) acc += ev.delta;
+          if (ev.action) action = ev;
           if (ev.error) { bot.m.error = !acc; acc = acc ? acc + "\n\n" + ev.error : ev.error; }
         }
-        bot.m.content = acc; bot.m.pending = false;
-        const now = performance.now();
-        if (now - lastPaint > 60) { fillBubble(bot.el.querySelector(".bubble"), bot.m); scrollEnd(false); lastPaint = now; }
+        if (acc && !action) {
+          Object.assign(bot.m, { content: acc, pending: false, streaming: true });
+          const now = performance.now();
+          if (!md_()) fillBody(bot.el.querySelector(".body"), bot.m);
+          else if (now - lastPaint > 50) { const d = md_(); d.innerHTML = md(acc); lastPaint = now; scrollEnd(); }
+        }
       }
-      bot.m.content = acc || t("netErr"); bot.m.pending = false; refresh(bot);
-    } catch (e) {
-      bot.m.pending = false; bot.m.error = true; bot.m.content = e.message || t("netErr"); refresh(bot);
-    }
+      if (action) {
+        if (acc.trim()) { Object.assign(bot.m, { content: acc, pending: false, streaming: false, regen: null }); refresh(bot); bot = push({ role: "assistant", content: "", pending: true }); }
+        return mediaAction(action.action, action.prompt, bot);
+      }
+      Object.assign(bot.m, { content: acc || t("netErr"), pending: false, streaming: false }); refresh(bot);
+    } catch (e) { Object.assign(bot.m, { pending: false, streaming: false, error: true, content: e.message || t("netErr") }); refresh(bot); }
   }
-  // Fetch a free Pollinations image from the visitor's browser and make sure it is a real image:
-  // when the visitor is rate-limited Pollinations answers 402/429/503 with a "Free limit reached"
-  // placeholder picture, which must never be shown as the result.
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function mediaAction(kind, prompt, bot) {
+    Object.assign(bot.m, { pending: true, content: "", progress: kind === "image" ? t("imgWait") : t("vidWait") }); refresh(bot);
+    return kind === "video" ? genVideo(prompt, bot) : genImage(prompt, bot);
+  }
+
+  // ---- free image sources. Never trust a Pollinations picture blindly: when the visitor is rate-limited it
+  // answers with a "Busy right now" / "Free limit reached" notice image, which must never be shown.
   function blobToDataURL(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
-  async function fetchRealImage(u, onWait, tries = 3) {
+  const PLACEHOLDER_SIZES = new Set([91585, 83870]);
+  const PLACEHOLDER_SHA256 = new Set(["116b73d9224bb6a5a503addf0105616b8efb60996a54acc1e40909c3f2f18ec1", "5b0c323c4889eeb9809c928cba3606c897a36fb3a17b0dc6caf225913b72a82d"]);
+  async function looksLikePlaceholder(blob, dataUrl) {
+    if (PLACEHOLDER_SIZES.has(blob.size)) return true;
+    try {
+      if (crypto.subtle) {
+        const h = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))).map((x) => x.toString(16).padStart(2, "0")).join("");
+        if (PLACEHOLDER_SHA256.has(h)) return true;
+      }
+      // The notice has a cream text panel across the bottom quarter.
+      const im = await loadImg(dataUrl); const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+      const g = cv.getContext("2d"); g.drawImage(im, 0, 0, 64, 64);
+      const d = g.getImageData(0, 48, 64, 16).data; let cream = 0, dark = 0; const n = d.length / 4;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], gg = d[i + 1], b = d[i + 2];
+        if (r > 232 && gg > 226 && b > 212 && Math.max(r, gg, b) - Math.min(r, gg, b) < 30) cream++;
+        if (r + gg + b < 240) dark++;
+      }
+      return cream / n > 0.75 && dark / n > 0.005 && dark / n < 0.2;
+    } catch { return false; }
+  }
+  async function fetchRealImage(u, onWait, tries = 1) {
     for (let i = 0; i < tries; i++) {
       let wait = 6;
       try {
@@ -314,195 +359,265 @@
         const ct = res.headers.get("content-type") || "";
         if (res.ok && ct.startsWith("image/")) {
           const b = await res.blob();
-          if (b.size > 2000) return await blobToDataURL(b);
+          if (b.size > 2000) { const du = await blobToDataURL(b); if (!(await looksLikePlaceholder(b, du))) return du; }
         }
         const ra = parseFloat(res.headers.get("retry-after") || ""); if (ra > 0) wait = Math.min(10, ra + 1);
-      } catch (e) { /* network/CORS error: retry */ }
-      if (i < tries - 1) {
-        for (let left = Math.round(wait); left > 0; left--) { onWait && onWait(vt("busy").replace("{s}", left)); await sleep(1000); }
-      }
+      } catch {}
+      if (i < tries - 1) for (let left = Math.round(wait); left > 0; left--) { onWait && onWait(t("busy").replace("{s}", left)); await sleep(1000); }
     }
     return null;
   }
-  async function serverFallbackImage(prompt, w, h, onWait) {
-    onWait && onWait(vt("altServer"));
+  // Free Hugging Face Spaces called straight from the visitor's browser: their free GPU quota is per visitor IP.
+  async function hfCall(host, api, data, timeoutMs = 120000) {
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetch(`${host}/gradio_api/call/${api}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data }), signal: ctl.signal });
+      if (!r.ok) throw new Error("hf " + r.status);
+      const { event_id } = await r.json();
+      const s = await fetch(`${host}/gradio_api/call/${api}/${event_id}`, { signal: ctl.signal });
+      const txt = await s.text();
+      const m = txt.match(/event: complete\s*\ndata: (.*)/);
+      if (!m) throw new Error("hf error");
+      return JSON.parse(m[1]);
+    } finally { clearTimeout(timer); }
+  }
+  async function hfFile(host, item) {
+    const u = item && item.path ? `${host}/gradio_api/file=${item.path}` : item && item.url;
+    const r = await fetch(u); if (!r.ok) throw new Error("hf file " + r.status);
+    return blobToDataURL(await r.blob());
+  }
+  async function hfUpload(host, blob) {
+    const fd = new FormData(); fd.append("files", blob, "photo.jpg");
+    const r = await fetch(`${host}/gradio_api/upload`, { method: "POST", body: fd }); if (!r.ok) throw new Error("upload " + r.status);
+    const [path] = await r.json(); return { path, meta: { _type: "gradio.FileData" } };
+  }
+  const FLUX = "https://black-forest-labs-flux-1-schnell.hf.space";
+  async function browserFlux(prompt, w, h) {
+    const s = Math.min(1, 1024 / Math.max(w || 1024, h || 1024));
+    const W = Math.max(256, Math.floor(((w || 1024) * s) / 32) * 32), H = Math.max(256, Math.floor(((h || 1024) * s) / 32) * 32);
+    try { const res = await hfCall(FLUX, "infer", [prompt.slice(0, 700), 0, true, W, H, 4], 90000); return await hfFile(FLUX, res[0]); }
+    catch { return null; }
+  }
+  async function browserCutout(file) {
+    const spaces = [["https://not-lain-background-removal.hf.space", "png", (f) => [f], 0], ["https://kenjiedec-rembg.hf.space", "inference", (f) => [f, "isnet-general-use", 0, 0], 0]];
+    for (const [host, api, args, idx] of spaces) {
+      try { const f = await hfUpload(host, file); const res = await hfCall(host, api, args(f), 120000); return await hfFile(host, res[idx]); }
+      catch {}
+    }
+    return null;
+  }
+  async function serverFallbackImage(prompt, w, h) {
     try {
       const res = await api("/api/image/fallback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, width: w || 1024, height: h || 1024 }) });
-      if (!res.ok) return null;
-      const j = await res.json(); return j.url || null;
+      if (!res.ok) return null; const j = await res.json(); return j.url || null;
     } catch { return null; }
+  }
+  // Pollinations (checked) -> FLUX in the browser -> FLUX on the server -> Pollinations again after its wait.
+  async function freeImage(pollUrl, prompt, w, h, onWait) {
+    let src = pollUrl ? await fetchRealImage(pollUrl, onWait, 1) : null;
+    if (!src) { onWait && onWait(t("altServer")); src = await browserFlux(prompt, w, h); }
+    if (!src) src = await serverFallbackImage(prompt, w, h);
+    if (!src && pollUrl) src = await fetchRealImage(pollUrl + "&retry=1", onWait, 2);
+    return src;
   }
   function setProgress(ref, text) { ref.m.progress = text; const p = ref.el.querySelector(".progress"); if (p) p.textContent = text; else refresh(ref); }
   async function genImage(prompt, ref) {
-    ref = ref || push({ role: "assistant", content: "", pending: true, progress: t("imgWait") });
+    ref.m.regen = { kind: "image", prompt };
     try {
       const res = await api("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
       if (!res.ok) throw new Error(await errText(res));
-      const j = await res.json();
-      let src = j.url;
+      const j = await res.json(); let src = j.url;
       if (j.source === "pollinations-direct") {
-        const onWait = (txt) => setProgress(ref, txt);
-        src = await fetchRealImage(j.url, onWait, 2);
-        if (!src) src = await serverFallbackImage(j.prompt || prompt, 1024, 1024, onWait);
-        if (!src) throw new Error(vt("allBusy"));
+        src = await freeImage(j.url, j.prompt || prompt, 1024, 1024, (x) => setProgress(ref, x));
+        if (!src) throw new Error(t("allBusy"));
       }
-      Object.assign(ref.m, { pending: false, type: "image", url: src, prompt: j.prompt, content: "", progress: "" });
+      Object.assign(ref.m, { pending: false, type: "image", url: src, prompt: j.prompt || prompt, content: "", progress: "", error: false });
     } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     refresh(ref);
   }
-  // Put the transparent cutout onto a background on a canvas (cover-fit). bg may be null -> gradient.
-  function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
-  async function compositeCutout(cutoutUrl, bgUrl) {
-    const fg = await loadImg(cutoutUrl);
-    const cv = document.createElement("canvas"); cv.width = fg.naturalWidth; cv.height = fg.naturalHeight;
-    const g = cv.getContext("2d");
-    if (bgUrl) {
-      const bg = await loadImg(bgUrl);
-      const s = Math.max(cv.width / bg.naturalWidth, cv.height / bg.naturalHeight);
-      const w = bg.naturalWidth * s, h = bg.naturalHeight * s;
-      g.drawImage(bg, (cv.width - w) / 2, (cv.height - h) / 2, w, h);
-    } else {
-      const gr = g.createLinearGradient(0, 0, 0, cv.height); gr.addColorStop(0, "#6366f1"); gr.addColorStop(1, "#ec4899");
-      g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height);
-    }
-    g.drawImage(fg, 0, 0);
-    return cv.toDataURL("image/jpeg", 0.9);
-  }
   async function genVideo(prompt, ref) {
-    ref = ref || push({ role: "assistant", content: "", pending: true, progress: t("vidWait") });
+    ref.m.regen = { kind: "video", prompt };
     const started = Date.now();
-    const timer = setInterval(() => { ref.m.progress = `${t("vidWait")} ${Math.round((Date.now() - started) / 1000)}s`; const p = ref.el.querySelector(".progress"); if (p) p.textContent = ref.m.progress; }, 1000);
+    const timer = setInterval(() => setProgress(ref, `${t("vidWait")} ${Math.round((Date.now() - started) / 1000)}s`), 1000);
     try {
       const res = await api("/api/video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
       if (!res.ok) throw new Error(await errText(res));
       const j = await res.json();
-      Object.assign(ref.m, { pending: false, type: "video", url: j.url, prompt: j.prompt, content: "", progress: "" });
-    } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr") }); }
+      Object.assign(ref.m, { pending: false, type: "video", url: j.url, prompt: j.prompt || prompt, content: "", progress: "", error: false });
+    } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     clearInterval(timer); refresh(ref);
   }
-  async function sendPhoto(file, question, preview) {
-    push({ role: "user", content: question, photo: preview });
-    const bot = push({ role: "assistant", content: "", pending: true });
+  function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+  async function compositeCutout(cutoutUrl, bgUrl) {
+    const fg = await loadImg(cutoutUrl);
+    const cv = document.createElement("canvas"); cv.width = fg.naturalWidth; cv.height = fg.naturalHeight; const g = cv.getContext("2d");
+    if (bgUrl) { const bg = await loadImg(bgUrl); const s = Math.max(cv.width / bg.naturalWidth, cv.height / bg.naturalHeight); const w = bg.naturalWidth * s, h = bg.naturalHeight * s; g.drawImage(bg, (cv.width - w) / 2, (cv.height - h) / 2, w, h); }
+    else { const gr = g.createLinearGradient(0, 0, 0, cv.height); gr.addColorStop(0, "#6366f1"); gr.addColorStop(1, "#ec4899"); g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height); }
+    g.drawImage(fg, 0, 0); return cv.toDataURL("image/jpeg", 0.9);
+  }
+  async function sendPhoto(file, question, bot) {
+    bot.m.progress = t("editing"); refresh(bot);
     try {
       const fd = new FormData(); fd.append("file", file, file.name || "photo.jpg"); fd.append("question", question || "");
-      bot.m.progress = question ? vt("editing") : ""; refresh(bot);
       const res = await api("/api/vision", { method: "POST", body: fd });
       if (!res.ok) throw new Error(await errText(res));
       const j = await res.json();
       if (j.edit) {
-        let img = j.image, note = j.reply || "";
-        if (j.op === "replace_bg") {
-          const onWait = (txt) => setProgress(bot, txt);
-          setProgress(bot, vt("bgMaking"));
-          let bg = await fetchRealImage(j.bg_url, onWait, 2);
-          if (!bg) bg = await serverFallbackImage(j.bg_prompt, 1024, Math.round(1024 * (j.height || 1) / (j.width || 1)), onWait);
-          if (!bg) note = "✅ " + vt("bgFallback");
-          img = await compositeCutout(j.cutout, bg);
+        let img = j.image, cutout = j.cutout, note = j.reply || "";
+        if (j.client_cutout) { // the server's free cutout servers were busy: do it from this browser
+          setProgress(bot, t("editing"));
+          cutout = await browserCutout(file);
+          if (!cutout) throw new Error(t("cutFail"));
+          if (j.op === "remove_bg") img = cutout;
         }
-        Object.assign(bot.m, { pending: false, type: "image", url: img, prompt: note.replace(/^✅\s*/, ""), content: "", progress: "",
-          fname: j.op === "remove_bg" ? "nexora-no-background.png" : "nexora-edit.jpg" });
-        bot.m.pending = false; refresh(bot); return;
-      }
-      bot.m.content = j.reply;
-    } catch (e) { bot.m.error = true; bot.m.content = e.message || t("netErr"); }
-    bot.m.pending = false; refresh(bot);
+        if (j.op === "replace_bg") {
+          const fg = await loadImg(cutout); const w = fg.naturalWidth, h = fg.naturalHeight;
+          setProgress(bot, t("bgMaking"));
+          const s = 1024 / Math.max(w, h); const bw = Math.max(256, Math.floor((w * s) / 32) * 32), bh = Math.max(256, Math.floor((h * s) / 32) * 32);
+          const pollUrl = j.bg_url || `https://image.pollinations.ai/prompt/${encodeURIComponent(j.bg_prompt.slice(0, 700))}?width=${bw}&height=${bh}&nologo=true&seed=${Math.floor(Math.random() * 2e9)}`;
+          const bg = await freeImage(pollUrl, j.bg_prompt, bw, bh, (x) => setProgress(bot, x));
+          if (!bg) note = "✅ " + t("bgFallback");
+          img = await compositeCutout(cutout, bg);
+        }
+        Object.assign(bot.m, { pending: false, type: "image", url: img, prompt: note.replace(/^✅\s*/, ""), content: "", progress: "", fname: j.op === "remove_bg" ? "nexora-no-background.png" : "nexora-edit.jpg" });
+      } else Object.assign(bot.m, { pending: false, content: j.reply, progress: "" });
+    } catch (e) { Object.assign(bot.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
+    refresh(bot);
   }
+  async function regenerate(m) {
+    if (busy || !m.regen) return;
+    const r = m.regen; busy = true; setBusy(true);
+    const c = chat(); const i = c.messages.indexOf(m); const row = els.thread.querySelectorAll(".msg")[i];
+    Object.assign(m, { content: "", error: false, pending: true, type: "", url: "", prompt: "", aid: "", progress: "" });
+    const ref = { m, el: row || msgEl(m) }; refresh(ref);
+    try {
+      if (r.kind === "image") await genImage(r.prompt, ref);
+      else if (r.kind === "video") await genVideo(r.prompt, ref);
+      else await sendChat(r.text, ref);
+    } finally { busy = false; setBusy(false); }
+  }
+  function setBusy(b) { els.send.disabled = b; els.mic.disabled = b; }
 
   async function submit() {
     if (busy) return;
     const text = els.input.value.trim();
     if (!text && !pendingPhoto) return;
     if (!navigator.onLine) { toast(t("offline")); return; }
-    busy = true; els.send.disabled = true;
-    els.input.value = ""; autosize();
+    busy = true; setBusy(true);
+    els.input.value = ""; autosize(); refreshPrevActions();
     try {
       if (pendingPhoto) {
         const { file, preview } = pendingPhoto; clearPhoto();
-        await sendPhoto(file, text, preview);
-      } else if (mode === "image") {
-        push({ role: "user", content: text }); await genImage(text);
-      } else if (mode === "video") {
-        push({ role: "user", content: text }); await genVideo(text);
+        push({ role: "user", content: text, photo: preview });
+        const bot = push({ role: "assistant", content: "", pending: true });
+        await sendPhoto(file, text, bot);
       } else {
-        push({ role: "user", content: text }); await sendChat(text);
+        push({ role: "user", content: text });
+        const bot = push({ role: "assistant", content: "", pending: true });
+        await sendChat(text, bot);
       }
-    } finally { busy = false; els.send.disabled = false; }
+    } finally { busy = false; setBusy(false); const last = chat().messages.slice(-1)[0]; if (last && last.role !== "user") { const rows = els.thread.querySelectorAll(".msg.bot"); const row = rows[rows.length - 1]; if (row) refresh({ m: last, el: row }); } renderHistory(); }
   }
 
-  // ------------------------------------------------ voice (mic → WAV 16 kHz mono → /api/voice)
-  const MAX_REC_MS = 60000;
-  let rec = null;
+  // ------------------------------------------------ voice: mic -> WAV 16 kHz mono -> /api/voice
+  const MAX_REC_MS = 60000; let rec = null;
   function encodeWav(chunks, inRate) {
     let len = 0; chunks.forEach((c) => { len += c.length; });
     const pcm = new Float32Array(len); let o = 0; chunks.forEach((c) => { pcm.set(c, o); o += c.length; });
     const outRate = 16000, ratio = inRate / outRate, n = Math.floor(pcm.length / ratio);
     const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
-    const w = (off, str) => { for (let i = 0; i < str.length; i++) v.setUint8(off + i, str.charCodeAt(i)); };
-    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, outRate, true); v.setUint32(28, outRate * 2, true);
-    v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+    const w = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, outRate, true); v.setUint32(28, outRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
     for (let i = 0; i < n; i++) {
-      const start = Math.floor(i * ratio), end = Math.min(pcm.length, Math.floor((i + 1) * ratio)); let sum = 0, cnt = 0;
-      for (let j = start; j < end; j++) { sum += pcm[j]; cnt++; }
-      const x = Math.max(-1, Math.min(1, cnt ? sum / cnt : 0));
-      v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+      const s0 = Math.floor(i * ratio), s1 = Math.min(pcm.length, Math.floor((i + 1) * ratio)); let sum = 0, cnt = 0;
+      for (let j = s0; j < s1; j++) { sum += pcm[j]; cnt++; }
+      const x = Math.max(-1, Math.min(1, cnt ? sum / cnt : 0)); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
     }
     return new Blob([buf], { type: "audio/wav" });
   }
   async function startRec() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast(vt("noMic")); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast(t("noMic")); return; }
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
-    catch (e) { toast(e && e.name === "NotFoundError" ? vt("noMic") : vt("micDenied")); return; }
+    catch (e) { toast(e && e.name === "NotFoundError" ? t("noMic") : t("micDenied")); return; }
     const Ctx = window.AudioContext || window.webkitAudioContext; const ctx = new Ctx();
-    const src = ctx.createMediaStreamSource(stream); const proc = ctx.createScriptProcessor(4096, 1, 1);
-    const chunks = [];
-    proc.onaudioprocess = (e) => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    const src = ctx.createMediaStreamSource(stream); const proc = ctx.createScriptProcessor(4096, 1, 1); const chunks = [];
+    proc.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     src.connect(proc); proc.connect(ctx.destination);
-    const started = Date.now();
-    rec = { stream, ctx, src, proc, chunks, started };
+    const started = Date.now(); rec = { stream, ctx, src, proc, chunks, started };
     els.mic.classList.add("recording");
-    const tick = () => { if (!rec) return; const s = Math.round((Date.now() - started) / 1000); els.hint.textContent = `🔴 ${s}s · ${vt("rec")}`; };
+    const tick = () => { if (rec) els.recStatus.textContent = `🔴 ${Math.round((Date.now() - started) / 1000)}s · ${t("rec")}`; };
     tick(); rec.timer = setInterval(() => { tick(); if (Date.now() - started >= MAX_REC_MS) stopRec(); }, 500);
   }
   async function stopRec() {
     const r = rec; if (!r) return; rec = null;
-    clearInterval(r.timer); els.mic.classList.remove("recording"); updateComposer();
+    clearInterval(r.timer); els.mic.classList.remove("recording"); els.recStatus.textContent = "";
     try { r.proc.disconnect(); r.src.disconnect(); } catch {}
     r.stream.getTracks().forEach((tr) => tr.stop());
     const rate = r.ctx.sampleRate; r.ctx.close().catch(() => {});
-    if (Date.now() - r.started < 700) { toast(vt("tooShort")); return; }
+    if (Date.now() - r.started < 700) { toast(t("tooShort")); return; }
     await sendVoice(encodeWav(r.chunks, rate));
   }
   async function sendVoice(blob) {
-    if (busy) return;
-    if (!navigator.onLine) { toast(t("offline")); return; }
-    busy = true; els.send.disabled = true; els.mic.disabled = true;
+    if (busy) return; if (!navigator.onLine) { toast(t("offline")); return; }
+    busy = true; setBusy(true); refreshPrevActions();
     const user = push({ role: "user", content: "🎤 …" });
-    const bot = push({ role: "assistant", content: "", pending: true, progress: vt("voiceWait") });
+    let bot = push({ role: "assistant", content: "", pending: true, progress: t("voiceWait") });
     try {
-      const fd = new FormData();
-      fd.append("file", blob, "voice.wav"); fd.append("mode", mode); fd.append("session_id", sid + ":" + current);
-      fd.append("history", JSON.stringify(historyPayload()));
+      const fd = new FormData(); fd.append("file", blob, "voice.wav"); fd.append("mode", "auto"); fd.append("session_id", sid + ":" + current);
+      fd.append("history", JSON.stringify(historyPayload(chat().messages.length - 2)));
       const res = await api("/api/voice", { method: "POST", body: fd });
       if (!res.ok) throw new Error(await errText(res));
       const j = await res.json();
       user.m.content = "🎤 " + (j.transcript || "…"); refresh(user);
-      const c = chat(); if (!c.title || c.title.startsWith("🎤")) { c.title = user.m.content.slice(0, 60); renderHistory(); }
-      if (j.action === "image" || j.action === "video") {
-        bot.m.progress = j.action === "image" ? t("imgWait") : t("vidWait"); refresh(bot);
-        await (j.action === "image" ? genImage(j.prompt, bot) : genVideo(j.prompt, bot));
-      } else {
-        bot.m.content = j.reply || t("netErr"); bot.m.pending = false; bot.m.progress = "";
-        if (j.audio) { bot.m.aid = "a" + Date.now().toString(36); audioCache.set(bot.m.aid, j.audio); bot.m.autoplay = true; }
+      const c = chat(); if (!c.renamed && (!c.title || c.title === "…")) { c.title = autoTitle(user.m); renderHistory(); }
+      if (j.action) await mediaAction(j.action, j.prompt, bot);
+      else {
+        Object.assign(bot.m, { content: j.reply || t("netErr"), pending: false, progress: "", regen: null });
+        if (j.audio) { bot.m.aid = "a" + uid(); audioCache.set(bot.m.aid, j.audio); bot.m.autoplay = true; }
         refresh(bot); bot.m.autoplay = false;
       }
     } catch (e) {
       if (user.m.content === "🎤 …") { user.m.content = "🎤"; refresh(user); }
       Object.assign(bot.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); refresh(bot);
-    } finally { busy = false; els.send.disabled = false; els.mic.disabled = false; save(); }
+    } finally { busy = false; setBusy(false); save(); }
+  }
+  async function speak(m, body, btn) {
+    btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = `⏳ <span>${esc(t("ttsWait"))}</span>`;
+    try {
+      const res = await api("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: m.content.slice(0, 6000) }) });
+      if (!res.ok) throw new Error(await errText(res));
+      const j = await res.json(); m.aid = m.aid || "a" + uid(); audioCache.set(m.aid, j.audio);
+      addAudio(body, j.audio, true); btn.remove();
+    } catch (e) { toast(e.message || t("netErr")); btn.disabled = false; btn.innerHTML = old; }
   }
   els.mic.onclick = () => { if (rec) stopRec(); else if (!busy) startRec(); };
+
+  // ------------------------------------------------ photo attach
+  function shrink(file) {
+    return new Promise((resolve) => {
+      const img = new Image(); const r = new FileReader();
+      r.onload = () => { img.src = r.result; };
+      img.onload = () => {
+        const s = Math.min(1, 1280 / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas"); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        const tc = document.createElement("canvas"); const ts = Math.min(1, 360 / Math.max(img.width, img.height));
+        tc.width = Math.round(img.width * ts); tc.height = Math.round(img.height * ts); tc.getContext("2d").drawImage(img, 0, 0, tc.width, tc.height);
+        cv.toBlob((blob) => resolve({ file: new File([blob], "photo.jpg", { type: "image/jpeg" }), preview: tc.toDataURL("image/jpeg", 0.7) }), "image/jpeg", 0.88);
+      };
+      img.onerror = () => resolve({ file, preview: "" });
+      r.readAsDataURL(file);
+    });
+  }
+  els.photoInput.onchange = async () => {
+    const f = els.photoInput.files[0]; els.photoInput.value = ""; if (!f) return;
+    pendingPhoto = await shrink(f); els.photoThumb.src = pendingPhoto.preview; els.photoPreview.hidden = false;
+    els.input.placeholder = t("photoQ"); els.input.focus();
+  };
+  function clearPhoto() { pendingPhoto = null; els.photoPreview.hidden = true; els.input.placeholder = t("placeholder"); }
+  $("#removePhoto").onclick = clearPhoto;
 
   // Android WebView can't download data: URLs itself; hand them to the app.
   document.addEventListener("click", (e) => {
@@ -511,78 +626,38 @@
     e.preventDefault(); NexoraAndroid.saveFile(a.href, a.getAttribute("download") || "nexora");
   }, true);
 
-  // ------------------------------------------------ photo
-  function shrink(file) {
-    return new Promise((resolve) => {
-      const img = new Image(); const r = new FileReader();
-      r.onload = () => { img.src = r.result; };
-      img.onload = () => {
-        const max = 1280, s = Math.min(1, max / Math.max(img.width, img.height));
-        const cv = document.createElement("canvas"); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
-        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-        const thumbCv = document.createElement("canvas"); const ts = Math.min(1, 320 / Math.max(img.width, img.height));
-        thumbCv.width = Math.round(img.width * ts); thumbCv.height = Math.round(img.height * ts);
-        thumbCv.getContext("2d").drawImage(img, 0, 0, thumbCv.width, thumbCv.height);
-        cv.toBlob((blob) => resolve({ file: new File([blob], "photo.jpg", { type: "image/jpeg" }), preview: thumbCv.toDataURL("image/jpeg", 0.7) }), "image/jpeg", 0.88);
-      };
-      img.onerror = () => resolve({ file, preview: "" });
-      r.readAsDataURL(file);
-    });
-  }
-  els.photoInput.onchange = async () => {
-    const f = els.photoInput.files[0]; els.photoInput.value = "";
-    if (!f) return;
-    pendingPhoto = await shrink(f);
-    els.photoThumb.src = pendingPhoto.preview; els.photoPreview.hidden = false;
-    els.input.placeholder = t("photoQ"); els.input.focus();
-  };
-  function clearPhoto() { pendingPhoto = null; els.photoPreview.hidden = true; updateComposer(); }
-  $("#removePhoto").onclick = clearPhoto;
-
   // ------------------------------------------------ lead form
-  function openLead() { els.leadDialog.showModal ? els.leadDialog.showModal() : els.leadDialog.setAttribute("open", ""); }
+  $("#leadBtn").onclick = () => { closeSide(); els.leadDialog.showModal ? els.leadDialog.showModal() : els.leadDialog.setAttribute("open", ""); };
   $("#leadCancel").onclick = () => els.leadDialog.close();
   els.leadForm.onsubmit = async (e) => {
     e.preventDefault();
-    const data = Object.fromEntries(new FormData(els.leadForm).entries());
-    data.session_id = sid;
+    const data = Object.fromEntries(new FormData(els.leadForm).entries()); data.session_id = sid;
     const btn = $("#leadSubmit"); btn.disabled = true;
     try {
       const res = await api("/api/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       if (!res.ok) throw new Error(await errText(res));
       els.leadDialog.close(); els.leadForm.reset();
-      if (mode !== "growth") setMode("growth");
       push({ role: "assistant", content: "✅ " + t("leadThanks") + "\n\n[Upwork — Md Zahngir Hossain](https://www.upwork.com/freelancers/mdzahngirhossain2)" });
     } catch (err) { toast(err.message || t("netErr")); }
     btn.disabled = false;
   };
 
-  // ------------------------------------------------ UI wiring
-  function autosize() { els.input.style.height = "auto"; els.input.style.height = Math.min(els.input.scrollHeight, 160) + "px"; }
+  // ------------------------------------------------ wiring
+  function autosize() { els.input.style.height = "auto"; els.input.style.height = Math.min(els.input.scrollHeight, 200) + "px"; }
   els.input.addEventListener("input", autosize);
-  els.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && window.matchMedia("(pointer:fine)").matches) { e.preventDefault(); submit(); }
-  });
+  els.input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(pointer:fine)").matches) { e.preventDefault(); submit(); } });
   els.form.onsubmit = (e) => { e.preventDefault(); submit(); };
-  function openDrawer() { els.drawer.classList.add("open"); els.scrim.classList.add("show"); }
-  function closeDrawer() { els.drawer.classList.remove("open"); els.scrim.classList.remove("show"); }
-  $("#openDrawer").onclick = openDrawer; $("#closeDrawer").onclick = closeDrawer; els.scrim.onclick = closeDrawer;
-  $("#newChat").onclick = newChat; $("#newChat2").onclick = newChat;
+  $("#openSide").onclick = openSide; $("#closeSide").onclick = closeSide; $("#scrim").onclick = closeSide;
+  $("#newChat").onclick = newChat; $("#newChatTop").onclick = newChat;
+  els.search.addEventListener("input", () => { query = els.search.value; renderHistory(); });
   $("#langBtn").onclick = () => { lang = lang === "bn" ? "en" : "bn"; localStorage.setItem(LS_LANG, lang); applyI18n(); };
+  $("#themeBtn").onclick = () => setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
   $("#clearAll").onclick = () => { if (confirm(t("confirmClear"))) { chats = {}; current = null; save(); newChat(); } };
-
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; $("#installBtn").hidden = false; });
   $("#installBtn").onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $("#installBtn").hidden = true; };
-  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-  }
-
-  if (window.NexoraAndroid && /NexoraApp/.test(navigator.userAgent)) {
-    $("#serverBtn").hidden = false;
-    $("#serverBtn").onclick = () => window.NexoraAndroid.openSetup();
-  }
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if (window.NexoraAndroid && /NexoraApp/.test(navigator.userAgent)) { $("#serverBtn").hidden = false; $("#serverBtn").onclick = () => window.NexoraAndroid.openSetup(); }
 
   // init
-  const c = chat(); mode = c.mode || "chat";
-  applyI18n(); renderMessages();
+  chat(); applyI18n(); renderThread(); save();
 })();

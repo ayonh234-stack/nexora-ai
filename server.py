@@ -65,13 +65,12 @@ CFG = _Cfg()
 client = OpenAI(api_key=GEMINI_KEY or "missing", base_url=GEMINI_BASE, timeout=60.0)
 
 APP_NOTE = """
-App context: You are running inside the Nexora AI web/Android app (not Telegram).
-The user switches modes with tabs at the top: Chat, Content, Growth, Image, Video. Do not mention slash commands.
-Use Markdown formatting (headings, bullet lists, bold) where it helps readability.
+App context: You are running inside the Nexora AI web/Android app (not Telegram). There are no modes or tabs; never mention slash commands.
+The app renders Markdown (headings, lists, tables, code blocks).
 IMPORTANT: Always answer in the language of the user's LATEST message — English message → English reply; Bengali message → Bengali reply.
 """.strip()
 
-MODES = ("chat", "caption", "growth", "image", "video")
+MODES = ("auto", "chat", "caption", "growth", "image", "video")
 
 # ---------------------------------------------------------------- rate limit
 _LIMITS: dict[str, list[tuple[int, int]]] = {
@@ -170,6 +169,8 @@ def language_hint(text: str) -> str:
 
 
 def system_prompt(mode: str, lead: dict | None = None) -> str:
+    if mode in ("auto", "chat"):
+        return f"{prompts.assistant_system_prompt(lead, platform='app')}\n\n{APP_NOTE}"
     if mode == "caption":
         base = prompts.caption_system_prompt()
     elif mode == "growth":
@@ -272,7 +273,21 @@ app = FastAPI(title="Nexora AI", docs_url=None, redoc_url=None)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    path = request.url.path
+    app_shell = not path.startswith(("/api/", "/media/"))
+    if app_shell and request.method == "GET":
+        # Vercel gives every deployed file the same mtime, and StaticFiles' ETag is mtime+size, so an
+        # edited file of the same size (e.g. index.html "v=6" -> "v=7", sw.js "nexora-v6" -> "v7")
+        # got "304 Not Modified" and browsers / the Android WebView kept the OLD app forever.
+        # Ignore conditional requests for the app shell and send no validators: always fresh.
+        request.scope["headers"] = [(k, v) for k, v in request.scope["headers"]
+                                    if k not in (b"if-none-match", b"if-modified-since")]
     resp = await call_next(request)
+    if app_shell:
+        for h in ("etag", "last-modified"):
+            if h in resp.headers:
+                del resp.headers[h]
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     return resp
@@ -280,7 +295,7 @@ async def security_headers(request: Request, call_next):
 
 class ChatIn(BaseModel):
     message: str = Field(..., max_length=6000)
-    mode: str = "chat"
+    mode: str = "auto"
     session_id: str = Field("anon", max_length=80)
     history: list[dict] = Field(default_factory=list)
     stream: bool = True
@@ -291,16 +306,105 @@ def health():
     return {"ok": True, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID)}
 
 
+AUTO_TOOLS = [prompts.SAVE_LEAD_TOOL, prompts.IMAGE_TOOL, prompts.VIDEO_TOOL]
+
+
+def _media_action(calls: dict) -> dict | None:
+    for c in calls.values():
+        if c["name"] in ("generate_image", "generate_video"):
+            try:
+                prompt = (json.loads(c["args"] or "{}").get("prompt") or "").strip()
+            except Exception:
+                prompt = ""
+            if prompt:
+                return {"action": "image" if c["name"] == "generate_image" else "video", "prompt": prompt[:1500]}
+    return None
+
+
+def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str):
+    """One chat box: stream a smart answer; the model may call image/video/lead tools."""
+    sid = body.session_id
+    sys_prompt = system_prompt("auto", session_lead(sid)["lead"]) + "\n" + hint
+    messages = [{"role": "system", "content": sys_prompt}, *history, {"role": "user", "content": text}]
+
+    def ev(obj: dict) -> str:
+        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+    def run_lead_turn() -> str:
+        return ai.complete(client, CFG, system_prompt=sys_prompt, history=history, user_message=text,
+                           tools=[prompts.SAVE_LEAD_TOOL], on_tool=make_lead_tool(sid)) or ""
+
+    def gen():
+        chain = ai.model_chain(CFG)
+        for i, model in enumerate(chain):
+            last = i == len(chain) - 1
+            for attempt in range(2 if last else 1):
+                sent = False
+                calls: dict[int, dict] = {}
+                try:
+                    stream = ai.fast_client(client, last).chat.completions.create(
+                        model=model, messages=messages, temperature=0.7, stream=True,
+                        tools=AUTO_TOOLS, tool_choice="auto",
+                    )
+                    for chunk in stream:
+                        if not chunk.choices:
+                            continue
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            sent = True
+                            yield ev({"delta": delta.content})
+                        for tc in (delta.tool_calls or []):
+                            ent = calls.setdefault(tc.index or 0, {"name": "", "args": ""})
+                            if tc.function is not None:
+                                ent["name"] += tc.function.name or ""
+                                ent["args"] += tc.function.arguments or ""
+                    action = _media_action(calls)
+                    if action:
+                        yield ev(action)
+                    elif any(c["name"] == "save_lead" for c in calls.values()):
+                        reply = run_lead_turn()
+                        if reply:
+                            yield ev({"delta": ("\n\n" if sent else "") + reply})
+                    elif not sent:
+                        raise RuntimeError("empty reply (503 unavailable)")
+                    yield ev({"done": True, "model": model})
+                    return
+                except Exception as exc:
+                    logger.warning("auto stream %s attempt %s failed: %s", model, attempt + 1, str(exc)[:200])
+                    if sent:
+                        yield ev({"error": friendly_ai_error()})
+                        return
+                    if not last and ai.should_fallback(exc):
+                        ai.mark_failed(model, exc)
+                        break
+                    if last and attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    if not last:
+                        break
+        yield ev({"error": friendly_ai_error()})
+
+    if not body.stream:
+        try:
+            reply = run_lead_turn()
+        except Exception:
+            logger.exception("auto chat failed")
+            reply = ""
+        return JSONResponse({"reply": reply or friendly_ai_error()})
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.post("/api/chat")
 async def chat(body: ChatIn, request: Request):
     check_rate(request, "chat")
     text = body.message.strip()
     if not text:
         raise HTTPException(400, "empty message")
-    mode = body.mode if body.mode in MODES else "chat"
+    mode = body.mode if body.mode in MODES else "auto"
 
     # Natural-language media requests from chat-like modes are routed to the media endpoints.
-    if mode in ("chat", "caption"):
+    if mode in ("auto", "chat", "caption"):
         if media.looks_like_video_request(text):
             return JSONResponse({"action": "video", "prompt": media.extract_video_prompt(text) or text})
         if media.looks_like_image_request(text):
@@ -312,6 +416,9 @@ async def chat(body: ChatIn, request: Request):
 
     history = clean_history(body.history)
     hint = language_hint(text)
+
+    if mode in ("auto", "chat"):
+        return _auto_chat(body, text, history, hint)
 
     if mode == "growth":
         s = session_lead(body.session_id)
@@ -376,6 +483,8 @@ async def image(body: MediaIn, request: Request):
     prompt = media.extract_image_prompt(body.prompt) or body.prompt.strip()
     if not prompt:
         raise HTTPException(400, "empty prompt")
+    # Free image models understand English far better than Bengali.
+    prompt = await asyncio.to_thread(photoedit.english_image_prompt, GEMINI_KEY, AI_MODEL, prompt)
     if IMAGE_CLIENT_SIDE:
         import random
         q = urllib.parse.quote(prompt[:800], safe="")
@@ -471,7 +580,7 @@ async def voice_chat(
         raise HTTPException(400, "empty audio")
     if len(data) > 4 * 1024 * 1024:
         raise HTTPException(413, "অডিও খুব বড় (১ মিনিটের কম রাখুন) / Audio too long — keep it under a minute")
-    mode = mode if mode in MODES else "chat"
+    mode = mode if mode in MODES else "auto"
     session_id = (session_id or "anon")[:80]
     try:
         transcript = await asyncio.to_thread(
@@ -483,7 +592,7 @@ async def voice_chat(
     if not transcript:
         return {"transcript": "", "reply": "অডিওতে কোনো কথা শুনতে পাইনি, আবার বলুন। / I couldn't hear any speech — please try again.", "audio": ""}
 
-    if mode in ("chat", "caption"):
+    if mode in ("auto", "chat", "caption"):
         if media.looks_like_video_request(transcript):
             return {"transcript": transcript, "action": "video", "prompt": media.extract_video_prompt(transcript) or transcript}
         if media.looks_like_image_request(transcript):
@@ -498,7 +607,24 @@ async def voice_chat(
     hint = language_hint(transcript) + "\n" + VOICE_NOTE
     out: dict[str, Any] = {"transcript": transcript}
     try:
-        if mode == "growth":
+        if mode in ("auto", "chat"):
+            actions: list[dict] = []
+            lead_tool = make_lead_tool(session_id)
+
+            def on_tool(name: str, args: dict[str, Any]) -> str:
+                if name in ("generate_image", "generate_video") and (args.get("prompt") or "").strip():
+                    actions.append({"action": "image" if name == "generate_image" else "video", "prompt": str(args["prompt"])[:1500]})
+                    return "The app is now creating it and will show it. Reply with ONE short sentence saying it is being created (not finished)."
+                return lead_tool(name, args)
+
+            reply = await asyncio.to_thread(
+                ai.complete, client, CFG,
+                system_prompt=system_prompt("auto", session_lead(session_id)["lead"]) + "\n" + hint,
+                history=hist, user_message=transcript, tools=AUTO_TOOLS, on_tool=on_tool,
+            )
+            if actions:
+                return {"transcript": transcript, **actions[0]}
+        elif mode == "growth":
             s = session_lead(session_id)
             reply = await asyncio.to_thread(
                 ai.complete, client, CFG,
@@ -536,25 +662,38 @@ async def tts(body: TtsIn, request: Request):
 
 async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
     bn = media.has_bengali(request_text)
-    try:
+    if plan.op in ("remove_bg", "replace_bg"):
+        reply_rm = "✅ ব্যাকগ্রাউন্ড সরানো হয়েছে (স্বচ্ছ PNG)।" if bn else "✅ Background removed (transparent PNG)."
+        bg_desc = plan.background or ""
+        if plan.op == "replace_bg" and bg_desc and not bg_desc.isascii():
+            bg_desc = await asyncio.to_thread(photoedit.english_image_prompt, GEMINI_KEY, AI_MODEL, bg_desc)
+        bg_prompt = photoedit.background_prompt(bg_desc) if plan.op == "replace_bg" else ""
+        reply = reply_rm if plan.op == "remove_bg" else (
+            f"✅ নতুন ব্যাকগ্রাউন্ড: {plan.background}" if bn else f"✅ New background: {plan.background}")
+        try:
+            png, src = await asyncio.wait_for(asyncio.to_thread(photoedit.remove_background, data), timeout=75)
+        except Exception as exc:
+            # Server-side free cutout servers busy/out of quota: let the visitor's browser call the free
+            # Spaces itself (quota is per visitor IP) and composite locally. The photo is never "faked".
+            logger.warning("server cutout failed, delegating to the browser: %s", exc)
+            return {"edit": True, "op": plan.op, "client_cutout": True, "bg_prompt": bg_prompt,
+                    "background": plan.background, "reply": reply}
+        out = {"edit": True, "op": plan.op, "source": src, "reply": reply}
         if plan.op == "remove_bg":
-            png, src = await asyncio.to_thread(photoedit.remove_background, data)
-            return {"edit": True, "op": "remove_bg", "image": photoedit.data_url(png, "image/png"), "source": src,
-                    "reply": "✅ ব্যাকগ্রাউন্ড সরানো হয়েছে (স্বচ্ছ PNG)।" if bn else "✅ Background removed (transparent PNG)."}
-        if plan.op == "replace_bg":
-            png, src = await asyncio.to_thread(photoedit.remove_background, data)
-            from PIL import Image
-            import io as _io
-            w, h = Image.open(_io.BytesIO(png)).size
-            scale = 1024 / max(w, h)
-            bw, bh = max(256, int(w * scale) // 32 * 32), max(256, int(h * scale) // 32 * 32)
-            bg_prompt = photoedit.background_prompt(plan.background)
-            # The browser fetches the free Pollinations background (Vercel's IPs are refused), checks it
-            # is a real image (not the rate-limit placeholder), and composites it on a canvas.
-            return {"edit": True, "op": "replace_bg", "cutout": photoedit.data_url(png, "image/png"), "source": src,
-                    "bg_prompt": bg_prompt, "bg_url": photoedit.pollinations_url(bg_prompt, bw, bh),
-                    "width": w, "height": h, "background": plan.background,
-                    "reply": (f"✅ নতুন ব্যাকগ্রাউন্ড: {plan.background}" if bn else f"✅ New background: {plan.background}")}
+            out["image"] = photoedit.data_url(png, "image/png")
+            return out
+        from PIL import Image
+        import io as _io
+        w, h = Image.open(_io.BytesIO(png)).size
+        scale = 1024 / max(w, h)
+        bw, bh = max(256, int(w * scale) // 32 * 32), max(256, int(h * scale) // 32 * 32)
+        # The browser fetches the free background (Vercel's IPs are refused by Pollinations), verifies it
+        # is a real picture (not the rate-limit placeholder), and composites it on a canvas.
+        out.update({"cutout": photoedit.data_url(png, "image/png"), "bg_prompt": bg_prompt,
+                    "bg_url": photoedit.pollinations_url(bg_prompt, bw, bh), "width": w, "height": h,
+                    "background": plan.background})
+        return out
+    try:
         out, src = await asyncio.wait_for(
             asyncio.to_thread(photoedit.instruct_edit, data, plan.instruction or request_text), timeout=VIDEO_TIMEOUT
         )
