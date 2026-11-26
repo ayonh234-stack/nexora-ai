@@ -156,7 +156,12 @@ def _read_result(res) -> bytes:
         with open(res, "rb") as f:
             return f.read()
     if isinstance(res, str) and res.startswith("http"):
-        with urllib.request.urlopen(urllib.request.Request(res, headers={"User-Agent": "NexoraAI/1.0"}), timeout=60) as r:
+        headers = {"User-Agent": "NexoraAI/1.0"}
+        if any(host in res for host in ("huggingface.co", "hf.space", "hf.co")):
+            token = (os.getenv("HF_TOKEN") or "").strip()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        with urllib.request.urlopen(urllib.request.Request(res, headers=headers), timeout=60) as r:
             return r.read()
     raise RuntimeError("unexpected result")
 
