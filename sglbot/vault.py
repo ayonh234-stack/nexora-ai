@@ -7,6 +7,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -120,8 +121,72 @@ def _hmac(msg: str) -> str:
     return hmac.new(_key(), msg.encode(), hashlib.sha256).hexdigest()
 
 
+
+def _pin_item_key(t_ms: int) -> str:
+    return f"vault/pin_item/{t_ms}"
+
+
+def _write_pin(rec: dict | None) -> None:
+    """Write pin.json and a unique pin_item so readers are not stuck on a stale overwrite."""
+    t_ms = int(time.time() * 1000)
+    if rec is None:
+        payload = {"cleared": True, "t": t_ms / 1000.0, "t_ms": t_ms}
+    else:
+        rec = dict(rec)
+        rec["t"] = rec.get("t") or (t_ms / 1000.0)
+        rec["t_ms"] = t_ms
+        payload = rec
+    store.put("vault/pin", None if rec is None else payload)
+    store.put(_pin_item_key(t_ms), payload)
+    # keep the unique log short so list stays cheap
+    try:
+        keys = store.list_keys("vault/pin_item/")
+        for k in keys[:-12]:
+            store.delete(k)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("pin item prune failed: %s", str(exc)[:160])
+
+
+def _read_pin() -> dict | None:
+    cand = []
+    try:
+        primary = store.get("vault/pin", None)
+    except Exception:
+        primary = None
+    if isinstance(primary, dict) and primary:
+        ts = float(primary.get("t_ms") or (float(primary.get("t") or 0) * 1000))
+        cand.append((ts, primary))
+    try:
+        keys = store.list_keys("vault/pin_item/")
+    except Exception as exc:
+        logging.getLogger(__name__).warning("pin item list failed: %s", str(exc)[:160])
+        keys = []
+    for k in keys[-20:]:
+        try:
+            item = store.get(k, None)
+        except Exception:
+            continue
+        if not isinstance(item, dict) or not item:
+            continue
+        try:
+            key_ms = int(k.rsplit("/", 1)[-1])
+        except Exception:
+            key_ms = 0
+        ts = float(item.get("t_ms") or key_ms or (float(item.get("t") or 0) * 1000))
+        cand.append((ts, item))
+    if not cand:
+        return None
+    latest = max(cand, key=lambda x: x[0])[1]
+    if latest.get("cleared"):
+        return None
+    if latest.get("s") and latest.get("h"):
+        return latest
+    return None
+
+
 def has_pin() -> bool:
-    return bool(store.get("vault/pin", None))
+    rec = _read_pin()
+    return bool(rec and rec.get("s") and rec.get("h"))
 
 
 # Bengali + Arabic-Indic digits → ASCII, so a code typed as ১২৩৪৫৬ still matches.
@@ -134,7 +199,9 @@ _WEAK_EXACT = frozenset({"521901", "123456", "654321", "000000", "111111", "1231
 
 
 def normalize_digits(text: str) -> str:
-    return (text or "").translate(_DIGIT_TRANS).strip()
+    """ASCII-ify digits and strip spaces / hidden characters (iOS OTP autofill often inserts spaces)."""
+    s = (text or "").translate(_DIGIT_TRANS)
+    return re.sub(r"[\s\-\u200b\u200c\u200d\ufeff,]", "", s)
 
 
 def is_weak_pin(pin: str) -> bool:
@@ -147,8 +214,18 @@ def is_weak_pin(pin: str) -> bool:
 
 
 def _load_setup() -> list[dict]:
-    box = store.get("vault/setup_codes", None)
-    data = _dec(box) if box else {}
+    try:
+        box = store.get("vault/setup_codes", None)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("setup index get failed: %s", str(exc)[:160])
+        return []
+    if not box:
+        return []
+    try:
+        data = _dec(box)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("setup index decrypt failed: %s", str(exc)[:160])
+        return []
     recs = data.get("codes") if isinstance(data, dict) else data
     return list(recs or [])
 
@@ -157,28 +234,90 @@ def _save_setup(recs: list[dict]) -> None:
     store.put("vault/setup_codes", _enc({"codes": recs}))
 
 
+def _code_item_key(code: str) -> str:
+    """Unique, non-overwritten Blob path for one setup code (avoids stale CDN reads of a shared index)."""
+    raw = normalize_digits(code)
+    digest = hmac.new(_key(), f"setup-item|{raw}".encode(), hashlib.sha256).hexdigest()[:32]
+    return f"vault/setup_item/{digest}"
+
+
+def _put_code_item(code: str, rec: dict) -> None:
+    store.put(_code_item_key(code), _enc(rec))
+
+
+def _get_code_item(code: str, attempts: int = 3) -> dict | None:
+    key = _code_item_key(code)
+    for i in range(max(1, attempts)):
+        try:
+            box = store.get(key, None)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("setup item get failed: %s", str(exc)[:160])
+            box = None
+        if box:
+            try:
+                rec = _dec(box)
+                if rec:
+                    return rec
+            except Exception as exc:
+                logging.getLogger(__name__).warning("setup item decrypt failed: %s", str(exc)[:160])
+        if i + 1 < attempts:
+            time.sleep(0.25 * (i + 1))
+    return None
+
+
 def issue_setup_code() -> str:
-    """Mint a random 6-digit code, persist the last 3 in Blob (TTL 10 min)."""
+    """Mint a random 6-digit code. The authoritative copy is a unique Blob object; the last-3 index is best-effort."""
     now = time.time()
-    recs = [r for r in _load_setup() if float(r.get("exp") or 0) > now]
     for _ in range(20):
         code = f"{secrets.randbelow(1_000_000):06d}"
         if not is_weak_pin(code):
             break
-    recs.append({"c": code, "exp": now + SETUP_TTL, "t": now})
-    _save_setup(recs[-SETUP_KEEP:])
+    rec = {"c": code, "exp": now + SETUP_TTL, "t": now}
+    _put_code_item(code, rec)
+    got = _get_code_item(code, attempts=5)
+    if not got:
+        logging.getLogger(__name__).warning("setup item read-back missed after put")
+    try:
+        recs = [r for r in _load_setup() if float(r.get("exp") or 0) > now]
+        recs.append(rec)
+        _save_setup(recs[-SETUP_KEEP:])
+    except Exception as exc:
+        logging.getLogger(__name__).warning("setup index save failed: %s", str(exc)[:160])
     return code
+
+
+def _legacy_hmac_codes() -> list[str]:
+    """v15 issued codes as HMAC(time-window), not Blob. Still accept them for ~20–30 minutes."""
+    w = int(time.time() // 600)
+    out = []
+    for x in (w, w - 1, w - 2):
+        out.append(str(int(_hmac(f"setup|{x}")[:10], 16) % 1_000_000).zfill(6))
+    return out
 
 
 def check_setup_code(code: str) -> str:
     """Return 'ok', 'wrong', 'expired', or 'missing' (no code has been issued). Does not consume the code."""
+    log = logging.getLogger(__name__)
     raw = normalize_digits(code)
-    recs = _load_setup()
     if not raw:
-        return "missing"
-    if not recs:
+        log.info("setup-check result=missing unique=skip index_n=- hmac=no reason=empty")
         return "missing"
     now = time.time()
+    unique = "miss"
+    item = _get_code_item(raw, attempts=3)
+    if item:
+        c = normalize_digits(str(item.get("c") or ""))
+        if len(c) == len(raw) and hmac.compare_digest(c, raw):
+            unique = "hit"
+            result = "ok" if float(item.get("exp") or 0) > now else "expired"
+            log.info("setup-check result=%s unique=%s index_n=- hmac=no", result, unique)
+            return result
+        unique = "mismatch"
+
+    recs = _load_setup()
+    if not recs:
+        time.sleep(0.35)
+        recs = _load_setup()
     live = [r for r in recs if float(r.get("exp") or 0) > now]
 
     def _hit(rows: list[dict]) -> bool:
@@ -191,21 +330,41 @@ def check_setup_code(code: str) -> str:
         return False
 
     if _hit(live):
+        log.info("setup-check result=ok unique=%s index_n=%s live=%s hmac=no", unique, len(recs), len(live))
+        return "ok"
+    hmac_hit = False
+    if len(raw) == 6:
+        for c in _legacy_hmac_codes():
+            if hmac.compare_digest(c, raw):
+                hmac_hit = True
+                break
+    if hmac_hit:
+        log.info("setup-check result=ok unique=%s index_n=%s live=%s hmac=yes", unique, len(recs), len(live))
         return "ok"
     if _hit(recs):
+        log.info("setup-check result=expired unique=%s index_n=%s live=%s hmac=no", unique, len(recs), len(live))
         return "expired"
-    return "wrong" if live else "expired"
+    result = "missing" if not recs else ("wrong" if live else "expired")
+    log.info("setup-check result=%s unique=%s index_n=%s live=%s hmac=no", result, unique, len(recs), len(live))
+    return result
 
 
 def consume_setup_code(code: str) -> None:
     raw = normalize_digits(code)
+    try:
+        _put_code_item(raw, {"c": raw, "exp": 0, "t": time.time(), "used": True})
+    except Exception as exc:
+        logging.getLogger(__name__).warning("setup item consume failed: %s", str(exc)[:160])
     kept = []
     for r in _load_setup():
         c = normalize_digits(str(r.get("c") or ""))
         if len(c) == len(raw) and hmac.compare_digest(c, raw):
             continue
         kept.append(r)
-    _save_setup(kept)
+    try:
+        _save_setup(kept)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("setup index consume failed: %s", str(exc)[:160])
 
 
 # Back-compat alias (older callers expected a 6-digit string).
@@ -213,23 +372,38 @@ def setup_code(window: int | None = None) -> str:
     return issue_setup_code()
 
 
+def pin_error_kind(exc: Exception) -> str:
+    m = str(exc)
+    if "ফাঁস" in m or "exposed" in m.lower():
+        return "burned"
+    if "সহজ" in m or "weak" in m.lower():
+        return "weak"
+    if "কমপক্ষে" in m or "সংখ্যা" in m or "6" in m or "digit" in m.lower():
+        return "length"
+    return "format"
+
+
 def set_pin(pin: str) -> None:
     pin = normalize_digits(pin)
     if pin in BURNED_PINS or pin == "521901":
         raise VaultError("এই PIN আগে ফাঁস হয়ে গেছে, অন্য একটি নতুন PIN দিন। / This PIN was exposed — choose a different one.")
+    if pin.isdigit() and len(pin) < 6:
+        raise VaultError(f"PIN কমপক্ষে ৬ সংখ্যার হতে হবে (আপনি {len(pin)} সংখ্যা দিয়েছেন)। / PIN must be at least 6 digits (you entered {len(pin)}).")
+    if pin.isdigit() and len(pin) > 12:
+        raise VaultError("PIN সর্বোচ্চ ১২ সংখ্যা। / PIN can be at most 12 digits.")
     if is_weak_pin(pin):
         raise VaultError("এই PIN খুব সহজ বা আগে ফাঁস হয়েছিল, অন্য PIN দিন। / This PIN is too weak or was exposed — choose another.")
     if not re.fullmatch(r"\d{6,12}|.{8,64}", pin or ""):
         raise VaultError("PIN হতে হবে ৬–১২ সংখ্যা, অথবা ৮+ অক্ষরের পাসফ্রেজ। / PIN must be 6–12 digits or an 8+ character passphrase.")
     salt = secrets.token_bytes(16)
     h = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, 200_000)
-    store.put("vault/pin", {"s": base64.b64encode(salt).decode(), "h": base64.b64encode(h).decode(), "t": time.time()})
+    _write_pin({"s": base64.b64encode(salt).decode(), "h": base64.b64encode(h).decode(), "t": time.time()})
     store.put("vault/lock", {"fails": 0, "until": 0})
 
 
 def clear_pin() -> None:
     """Remove the web vault PIN (used after a test setup so the owner can set their own)."""
-    store.put("vault/pin", None)
+    _write_pin(None)
     store.put("vault/lock", {"fails": 0, "until": 0})
     store.put("vault/setup_codes", _enc({"codes": []}))
 
@@ -238,7 +412,7 @@ def check_pin(pin: str) -> bool:
     lock = store.get("vault/lock", {"fails": 0, "until": 0}) or {"fails": 0, "until": 0}
     if lock.get("until", 0) > time.time():
         raise VaultError(f"too many wrong PINs — locked for {int(lock['until'] - time.time()) // 60 + 1} min")
-    rec = store.get("vault/pin", None)
+    rec = _read_pin()
     if not rec:
         raise VaultError("no PIN set yet")
     pin = normalize_digits(pin)

@@ -75,6 +75,8 @@
     vTitle: "ভল্ট", vOff: "ভল্ট চালু নেই", vSetupTitle: "ভল্ট PIN সেট করুন", vSetupSub: "৩টি ঘর: (১) টেলিগ্রামে আসা ৬ সংখ্যার কোড — আপনার PIN নয়, (২) নতুন PIN, (৩) আবার একই PIN।",
     vSendCode: "Telegram-এ কোড পাঠাও", vCode: "টেলিগ্রামে আসা কোড", vCodePh: "৬ সংখ্যার কোড, PIN নয়", vNewPin: "নতুন PIN", vPin2: "আবার একই PIN",
     vPinHint: "আগে উপরের বাটনে চাপুন। কোড টেলিগ্রামে আসবে, সেটাই প্রথম ঘরে দেবেন।",
+    vHavePin: "টেলিগ্রামে /vault pin দিয়ে PIN সেট করেছেন? এখানে আনলক করুন",
+    vPinShort: "PIN কমপক্ষে ৬ সংখ্যার হতে হবে।",
     vSave: "সেভ", vCodeSent: "কোড পাঠানো হয়েছে — Telegram দেখুন। প্রথম ঘরে সেই কোড দিন, PIN নয়।", vMismatch: "দ্বিতীয় ও তৃতীয় ঘরের PIN একই হতে হবে।", vCodeEmpty: "আগে কোড পাঠান, তারপর টেলিগ্রামে আসা কোড প্রথম ঘরে দিন।", vUnlockSub: "ভল্ট খুলতে PIN দিন।", vForgot: "PIN ভুলে গেছেন / প্রথমবার সেট করবেন?",
     vUnlock: "খুলুন", vLocked: "ভল্ট লক — আবার PIN দিন", vEmpty: "এখনও কিছু রাখা হয়নি", vInfo: "সব কিছু এনক্রিপ্ট করে রাখা। Nexora কাজের সময় ব্যবহার করবে, কিন্তু কখনও মান দেখাবে না।",
     igSub: "অফিশিয়াল Instagram API দিয়ে যুক্ত হবে, পাসওয়ার্ড লাগবে না। টোকেন এনক্রিপ্ট করে ভল্টে থাকবে।", igGuide: "ধাপে ধাপে বাংলা গাইড",
@@ -94,6 +96,8 @@
     vTitle: "Vault", vOff: "Vault is not enabled", vSetupTitle: "Set vault PIN", vSetupSub: "Three fields: (1) the 6-digit code from Telegram — not your PIN, (2) your new PIN, (3) the same PIN again.",
     vSendCode: "Send code to Telegram", vCode: "Code from Telegram", vCodePh: "6-digit code, not your PIN", vNewPin: "New PIN", vPin2: "Same PIN again",
     vPinHint: "Tap the button first. The code arrives in Telegram — put that in the first box.",
+    vHavePin: "Already set a PIN in Telegram with /vault pin? Unlock here",
+    vPinShort: "PIN must be at least 6 digits.",
     vSave: "Save", vCodeSent: "Code sent — check Telegram. Put that code in the first box, not your PIN.", vMismatch: "The two PIN fields must match.", vCodeEmpty: "Send a code first, then put the Telegram code in the first box.", vUnlockSub: "Enter your PIN to open the vault.", vForgot: "Forgot PIN / first-time setup?",
     vUnlock: "Unlock", vLocked: "Vault locked — enter PIN again", vEmpty: "Nothing stored yet", vInfo: "Everything is encrypted. Nexora uses entries for tasks but never shows the values.",
     vBurned: "This PIN was exposed earlier. Please set a new PIN.", vNeedSetup: "Set a PIN first using the code sent to Telegram.", vBurnedChange: "Vault unlocked. This PIN was exposed — set a new PIN now.",
@@ -160,8 +164,12 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "16";
+  const CLIENT_VERSION = "19";
   const BURNED_PIN = "521901";
+  function normalizeDigits(text) {
+    const map = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
+    return String(text || "").replace(/[০-৯]/g, (ch) => map[ch] || ch).replace(/[\s\-,\u200b\u200c\u200d\ufeff]/g, "");
+  }
   function isNetFail(e) {
     const name = (e && e.name) || "";
     const m = String((e && e.message) || e || "");
@@ -970,17 +978,19 @@
   }
   async function openVault(view) {
     closeSide();
+    checkVersion();
     let st = { has_pin: true, unlocked: false, enabled: true };
     try { st = await vaultCall("/api/vault/status"); } catch (e) { toast(e.message); }
     if (!st.enabled) { toast(t("vOff")); return; }
     if (st.unlocked && view !== "setup") return vaultUnlocked();
-    if (!st.has_pin || view === "setup") {
+    if (view !== "unlock" && (!st.has_pin || view === "setup")) {
       const d = sheet(`<h2>🔐 ${esc(t("vSetupTitle"))}</h2><p class="muted">${esc(t("vSetupSub"))}</p>
         <button type="button" class="ghost-btn wide" id="vSend">📨 ${esc(t("vSendCode"))}</button>
         <p class="mini">${esc(t("vPinHint"))}</p>
-        <label>${esc(t("vCode"))}<input id="vCode" inputmode="numeric" maxlength="8" autocomplete="one-time-code" placeholder="${esc(t("vCodePh"))}" /></label>
-        <label>${esc(t("vNewPin"))}<input id="vPin" type="password" minlength="6" maxlength="64" autocomplete="new-password" placeholder="••••••" /></label>
-        <label>${esc(t("vPin2"))}<input id="vPin2" type="password" maxlength="64" autocomplete="new-password" placeholder="••••••" /></label>
+        <label>${esc(t("vCode"))}<input id="vCode" inputmode="numeric" maxlength="12" autocomplete="one-time-code" placeholder="${esc(t("vCodePh"))}" /></label>
+        <label>${esc(t("vNewPin"))}<input id="vPin" type="password" minlength="6" maxlength="64" autocomplete="off" placeholder="••••••" /></label>
+        <label>${esc(t("vPin2"))}<input id="vPin2" type="password" maxlength="64" autocomplete="off" placeholder="••••••" /></label>
+        <p class="mini"><a href="#" id="vHavePin">${esc(t("vHavePin"))}</a></p>
         <div class="sheet-actions"><button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="vSet">${esc(t("vSave"))}</button></div>`);
       d.querySelector("#vSend").onclick = async (e) => {
         e.target.disabled = true;
@@ -988,12 +998,16 @@
         catch (er) { toast(er.message); }
         setTimeout(() => { e.target.disabled = false; }, 2000);
       };
+      const have = d.querySelector("#vHavePin");
+      if (have) have.onclick = (e) => { e.preventDefault(); openVault("unlock"); };
       d.querySelector("#vSet").onclick = async () => {
-        const code = d.querySelector("#vCode").value.trim();
-        const pin = d.querySelector("#vPin").value;
+        const code = normalizeDigits(d.querySelector("#vCode").value);
+        const pin = normalizeDigits(d.querySelector("#vPin").value);
+        const pin2 = normalizeDigits(d.querySelector("#vPin2").value);
         if (!code) { toast(t("vCodeEmpty")); return; }
-        if (pin !== d.querySelector("#vPin2").value) { toast(t("vMismatch")); return; }
+        if (pin !== pin2) { toast(t("vMismatch")); return; }
         if (pin === BURNED_PIN) { toast(t("vBurned")); return; }
+        if (/^\d+$/.test(pin) && pin.length < 6) { toast(t("vPinShort")); return; }
         try { const j = await vaultCall("/api/vault/pin", { code, pin }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; vaultUnlocked(); }
         catch (er) { toast(er.message); }
       };
@@ -1086,10 +1100,15 @@
   async function checkVersion() {
     if (busy || rec) return;
     try {
-      const r = await fetch(API + "/api/health", { cache: "no-store" }); const j = await r.json();
-      if (j.app_version && Number(j.app_version) > Number(CLIENT_VERSION)) location.reload();
+      const r = await fetch(API + "/api/health?r=" + Date.now(), { cache: "no-store" }); const j = await r.json();
+      if (!j.app_version || String(j.app_version) === String(CLIENT_VERSION)) return;
+      const key = "nexora.reloadedFor." + j.app_version;
+      if (sessionStorage.getItem(key)) return; // already tried this version; avoid a reload loop on a sticky cache
+      sessionStorage.setItem(key, "1");
+      location.replace("/?v=" + encodeURIComponent(j.app_version) + "&r=" + Date.now());
     } catch {}
   }
+  checkVersion();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkVersion(); });
   window.addEventListener("pageshow", (e) => { if (e.persisted) checkVersion(); });
   if (/[?&]v=\d/.test(location.search)) history.replaceState(null, "", location.pathname);

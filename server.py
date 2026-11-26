@@ -87,7 +87,7 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "imgfb": [(4, 60), (40, 86400)],
     "design": [(8, 60), (100, 86400)],
     "extract": [(10, 60), (100, 86400)],
-    "vault": [(6, 60), (40, 86400)],
+    "vault": [(20, 60), (80, 86400)],
     "vcode": [(5, 600), (10, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
@@ -338,6 +338,8 @@ async def security_headers(request: Request, call_next):
             if h in resp.headers:
                 del resp.headers[h]
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    elif path.startswith("/api/vault") or path.startswith("/api/health"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     return resp
@@ -353,13 +355,13 @@ class ChatIn(BaseModel):
     tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "16"
+APP_VERSION = "19"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
 UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
                  "· *Tap the button to load the new version here.*\n\n"
-                 '<form action="/" method="get"><input type="hidden" name="v" value="16">'
+                 '<form action="/" method="get"><input type="hidden" name="v" value="18">'
                  '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
                  'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
@@ -1121,7 +1123,7 @@ def vault_setup_code(request: Request):
                "আপনি নিজে না চাইলে এটা উপেক্ষা করুন। If you didn't request this, ignore it."})
     ok = bool(r and r.get("ok"))
     mid = (r or {}).get("result", {}).get("message_id") if isinstance(r, dict) else None
-    logger.info("vault setup-code telegram ok=%s message_id=%s", ok, mid)
+    logger.info("vault setup-code telegram ok=%s message_id=%s client=%s", ok, mid, request.headers.get("x-nexora-client") or "-")
     if not ok:
         raise HTTPException(502, "টেলিগ্রামে কোড পাঠানো যায়নি, একটু পরে আবার চাপুন। / Could not send the code to Telegram — please try again.")
     return {"sent": True}
@@ -1140,13 +1142,14 @@ def vault_set_pin(body: PinIn, request: Request):
     if not vault.enabled():
         raise HTTPException(503, "vault not configured")
     reason = vault.check_setup_code(body.code)
+    client = request.headers.get("x-nexora-client") or "-"
     if reason != "ok":
-        logger.info("vault set-pin rejected: %s", reason)
+        logger.info("vault set-pin rejected: %s client=%s", reason, client)
         raise HTTPException(403, _SETUP_CODE_ERRORS.get(reason, _SETUP_CODE_ERRORS["wrong"]))
     try:
         vault.set_pin(body.pin)
     except vault.VaultError as exc:
-        logger.info("vault set-pin rejected: pin-invalid")
+        logger.info("vault set-pin rejected: pin-invalid kind=%s client=%s", vault.pin_error_kind(exc), client)
         raise HTTPException(400, str(exc))
     vault.consume_setup_code(body.code)
     return {"ok": True, "token": vault.issue_owner_token()}

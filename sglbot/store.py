@@ -88,7 +88,7 @@ def put(key: str, value) -> None:
             from vercel.blob import sync as blob
 
             _bounded(blob.put_blob, PREFIX + key + ".json", data, access="private", content_type="application/json",
-                          allow_overwrite=True, cache_control_max_age=60)
+                          allow_overwrite=True, cache_control_max_age=0)
         else:
             os.makedirs(_LOCAL, exist_ok=True)
             p = os.path.join(_LOCAL, key.replace("/", "__") + ".json")
@@ -127,3 +127,48 @@ def get_bytes(key: str) -> bytes | None:
         return bytes(body)
     p = os.path.join(_LOCAL, key.replace("/", "__"))
     return open(p, "rb").read() if os.path.exists(p) else None
+
+
+def list_keys(prefix: str) -> list[str]:
+    """Relative keys (no .json suffix) under PREFIX+prefix, newest names last."""
+    if _blob_on():
+        from vercel.blob import sync as blob
+
+        def _all():
+            return list(blob.query_blobs(prefix=PREFIX + prefix, page_size=100))
+
+        items = _bounded(_all)
+        keys = []
+        for item in items:
+            path = getattr(item, "pathname", "") or ""
+            if path.startswith(PREFIX):
+                rel = path[len(PREFIX):]
+                if rel.endswith(".json"):
+                    rel = rel[:-5]
+                keys.append(rel)
+        keys.sort()
+        return keys
+    os.makedirs(_LOCAL, exist_ok=True)
+    out = []
+    pref = prefix.replace("/", "__")
+    for name in sorted(os.listdir(_LOCAL)):
+        if not name.endswith(".json"):
+            continue
+        rel = name[:-5].replace("__", "/")
+        if rel.startswith(prefix):
+            out.append(rel)
+    return out
+
+
+def delete(key: str) -> None:
+    if _blob_on():
+        from vercel.blob import sync as blob
+        try:
+            _bounded(blob.delete_blob, PREFIX + key + ".json")
+        except Exception as exc:
+            logger.warning("store.delete %s failed: %s", key, str(exc)[:160])
+    else:
+        p = os.path.join(_LOCAL, key.replace("/", "__") + ".json")
+        if os.path.exists(p):
+            os.remove(p)
+    _cache.pop(key, None)
