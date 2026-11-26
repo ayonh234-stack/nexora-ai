@@ -241,8 +241,16 @@ def generate_image(api_key: str, prompt: str) -> ImageResult:
     # then the free FLUX.1-schnell Hugging Face Space.
     from sglbot import photoedit
 
-    if not prompt.isascii():  # free generators understand English far better than Bengali
-        prompt = photoedit.english_image_prompt(api_key, os.getenv("AI_MODEL") or "gemini-3.5-flash-lite", prompt)
+    from sglbot import design
+
+    # Text posts (hooks, quotes, offers...) get real typography over an AI background; pictures get a
+    # faithful English prompt (free generators garble text and understand English far better than Bengali).
+    plan = design.plan(api_key, os.getenv("AI_MODEL") or "gemini-3.5-flash-lite", prompt)
+    if plan["type"] == "design":
+        bg = photoedit.generate_image_free(plan["bg_prompt"], 832, 1024)
+        png = design.render(plan, bg[0] if bg else None)
+        return ImageResult(png, "image/png", "design", "nexora-post.png")
+    prompt = plan.get("prompt") or prompt
     got = photoedit.generate_image_free(prompt, 1024, 1024)
     if got:
         data, source = got

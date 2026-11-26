@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import csv
 import json
 import logging
@@ -25,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import ai, media, photoedit, prompts, voice
+from sglbot import ai, design, media, photoedit, prompts, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -84,6 +85,7 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "tts": [(15, 60), (200, 86400)],
     "edit": [(4, 60), (40, 86400)],
     "imgfb": [(4, 60), (40, 86400)],
+    "design": [(8, 60), (100, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _rl_lock = threading.Lock()
@@ -91,7 +93,7 @@ _rl_lock = threading.Lock()
 
 PROXY_HOPS = max(1, int(os.getenv("TRUST_PROXY_HOPS", "1") or 1))
 # Whole-server daily caps (all visitors together) to protect the free quotas.
-_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000, "edit": 300, "imgfb": 300}
+_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000, "edit": 300, "imgfb": 300, "design": 800}
 
 
 def client_ip(request: Request) -> str:
@@ -301,9 +303,21 @@ class ChatIn(BaseModel):
     stream: bool = True
 
 
+APP_VERSION = "11"
+# Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
+# They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
+# can show (plain reply / image URL) plus a one-tap link to the new version.
+UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে!** নতুন ডিজাইন পেতে [এখানে চাপুন](/?v=11) "
+                 "(বা পেজটা একবার রিফ্রেশ করুন)। · *Nexora was updated — [tap here](/?v=11) to load the new version.*\n\n---\n\n")
+
+
+def is_legacy(request: Request) -> bool:
+    return not request.headers.get("x-nexora-client")
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID)}
+    return {"ok": True, "app_version": APP_VERSION, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID), "bengali_text": design.shaping_ok()}
 
 
 AUTO_TOOLS = [prompts.SAVE_LEAD_TOOL, prompts.IMAGE_TOOL, prompts.VIDEO_TOOL]
@@ -408,7 +422,9 @@ async def chat(body: ChatIn, request: Request):
         if media.looks_like_video_request(text):
             return JSONResponse({"action": "video", "prompt": media.extract_video_prompt(text) or text})
         if media.looks_like_image_request(text):
-            return JSONResponse({"action": "image", "prompt": media.extract_image_prompt(text) or text})
+            # New pages send the chat context to /api/image, where the full request is rewritten faithfully.
+            return JSONResponse({"action": "image", "prompt": (media.extract_image_prompt(text) or text)
+                                 if is_legacy(request) else text})
     if mode == "image":
         return JSONResponse({"action": "image", "prompt": text})
     if mode == "video":
@@ -416,6 +432,18 @@ async def chat(body: ChatIn, request: Request):
 
     history = clean_history(body.history)
     hint = language_hint(text)
+
+    if is_legacy(request) and mode in ("auto", "chat", "caption"):
+        # Old pages can't render tool/action stream events: answer as one plain reply.
+        try:
+            reply = await asyncio.to_thread(
+                ai.complete, client, CFG, system_prompt=system_prompt(mode) + "\n" + hint,
+                history=history, user_message=text,
+            )
+        except Exception:
+            logger.exception("legacy chat failed")
+            reply = friendly_ai_error()
+        return JSONResponse({"reply": UPDATE_NOTICE + (reply or friendly_ai_error())})
 
     if mode in ("auto", "chat"):
         return _auto_chat(body, text, history, hint)
@@ -475,29 +503,87 @@ async def chat(body: ChatIn, request: Request):
 
 class MediaIn(BaseModel):
     prompt: str = Field(..., max_length=1500)
+    context: list[dict] = Field(default_factory=list)  # recent chat turns, to resolve "it"/"that post"
 
 
 @app.post("/api/image")
 async def image(body: MediaIn, request: Request):
     check_rate(request, "image")
-    prompt = media.extract_image_prompt(body.prompt) or body.prompt.strip()
+    prompt = body.prompt.strip()
     if not prompt:
         raise HTTPException(400, "empty prompt")
-    # Free image models understand English far better than Bengali.
-    prompt = await asyncio.to_thread(photoedit.english_image_prompt, GEMINI_KEY, AI_MODEL, prompt)
+    # One Gemini call: is this a text design (hooks, quote, offer post...) or a picture? It also rewrites the
+    # request faithfully in English (free image models understand English far better than Bengali).
+    plan = await asyncio.to_thread(design.plan, GEMINI_KEY, AI_MODEL, prompt, clean_history(body.context)[-6:])
+    if plan["type"] == "design":
+        title = plan["title"] or plan["items"][0] if (plan["title"] or plan["items"]) else prompt[:80]
+        if IMAGE_CLIENT_SIDE and not is_legacy(request):
+            w, h = (1024, 1024) if plan["size"] == "square" else (832, 1024)
+            # The browser paints the text-free background (free FLUX quota per visitor), then /api/design/render.
+            return {"kind": "design", "spec": plan, "bg_prompt": plan["bg_prompt"], "width": w, "height": h,
+                    "bg_url": photoedit.pollinations_url(plan["bg_prompt"], w, h), "prompt": title}
+        got = await asyncio.to_thread(photoedit.generate_image_free, plan["bg_prompt"], 832, 1024, not IMAGE_CLIENT_SIDE)
+        png = await asyncio.to_thread(design.render, plan, got[0] if got else None)
+        return {"url": photoedit.data_url(png, "image/png"), "source": "design", "prompt": title}
+    prompt = plan.get("prompt") or prompt
+    if IMAGE_CLIENT_SIDE and is_legacy(request):
+        # Very old pages put the URL straight into <img>: give them a finished, verified picture.
+        got = await asyncio.to_thread(photoedit.flux_image, prompt, 1024, 1024)
+        if got:
+            return {"url": photoedit.data_url(got, "image/jpeg"), "source": "flux-schnell", "prompt": prompt}
     if IMAGE_CLIENT_SIDE:
-        import random
-        q = urllib.parse.quote(prompt[:800], safe="")
-        seed = random.randint(1, 2_000_000_000)
-        url = f"{media.POLLINATIONS_BASE}{q}?width=1024&height=1024&nologo=true&seed={seed}"
-        return {"url": url, "source": "pollinations-direct", "prompt": prompt}
-    try:
-        res = await asyncio.to_thread(media.generate_image, GEMINI_KEY, prompt)
-    except Exception:
-        logger.exception("image failed")
+        return {"url": photoedit.pollinations_url(prompt, 1024, 1024), "source": "pollinations-direct", "prompt": prompt}
+    got = await asyncio.to_thread(photoedit.generate_image_free, prompt, 1024, 1024)
+    if not got:
         raise HTTPException(502, "দুঃখিত, এখন ছবি বানানো গেল না। একটু পরে আবার চেষ্টা করুন। / Sorry, image generation failed — please try again.")
-    ext = "png" if "png" in res.mime else "jpg"
-    return {"url": save_media(res.data, ext), "source": res.source, "prompt": prompt}
+    return {"url": photoedit.data_url(got[0], "image/jpeg"), "source": got[1], "prompt": prompt}
+
+
+_PROXY_HOSTS = ("image.pollinations.ai", ".hf.space", "huggingface.co")
+
+
+@app.get("/api/fetch-media")
+async def fetch_media(url: str, request: Request):
+    """Same-origin copy of a generated image/video so iPhone can share/save it (cross-origin has no CORS)."""
+    check_rate(request, "imgfb")
+    u = urllib.parse.urlparse(url)
+    host = (u.hostname or "").lower()
+    if u.scheme != "https" or not any(host == h.lstrip(".") or host.endswith(h if h.startswith(".") else "." + h) for h in _PROXY_HOSTS):
+        raise HTTPException(400, "host not allowed")
+
+    def get():
+        req = urllib.request.Request(url, headers={"User-Agent": "NexoraAI/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            ctype = r.headers.get("content-type", "application/octet-stream").split(";")[0]
+            return r.read(25_000_001), ctype
+
+    try:
+        data, ctype = await asyncio.to_thread(get)
+    except Exception:
+        raise HTTPException(502, "fetch failed")
+    if len(data) > 25_000_000 or not ctype.startswith(("image/", "video/")):
+        raise HTTPException(415, "not media")
+    from fastapi.responses import Response
+    return Response(data, media_type=ctype, headers={"Cache-Control": "private, max-age=3600"})
+
+
+class DesignIn(BaseModel):
+    spec: dict
+    background: str = Field("", max_length=6_000_000)  # data: URL of the text-free background, optional
+
+
+@app.post("/api/design/render")
+async def design_render(body: DesignIn, request: Request):
+    check_rate(request, "design")
+    spec = design._clean(dict(body.spec, type="design"), "")
+    bg = None
+    if body.background.startswith("data:image/") and "," in body.background:
+        try:
+            bg = base64.b64decode(body.background.split(",", 1)[1])
+        except Exception:
+            bg = None
+    png = await asyncio.to_thread(design.render, spec, bg)
+    return {"url": photoedit.data_url(png, "image/png")}
 
 
 @app.post("/api/video")
@@ -534,6 +620,8 @@ async def vision(request: Request, file: UploadFile = File(...), question: str =
         plan = await asyncio.to_thread(photoedit.plan_edit, GEMINI_KEY, AI_MODEL, question.strip()[:1500])
         if plan.op != "none":
             check_rate(request, "edit")
+            if is_legacy(request):
+                return await _legacy_photo_edit(data, plan, question.strip())
             return await _photo_edit(data, plan, question.strip())
     q = question.strip() or (
         "এই ছবিটি পরিষ্কার করে বর্ণনা করুন। কোনো লেখা থাকলে তা লিখে দিন। "
@@ -713,6 +801,34 @@ async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
     except Exception:
         logger.exception("photo edit crashed")
         raise HTTPException(502, "দুঃখিত, ছবি এডিট করা গেল না। / Sorry, the photo edit failed — please try again.")
+
+
+async def _legacy_photo_edit(data: bytes, plan, request_text: str) -> dict:
+    """Finished edit for old pages: everything is done on the server and returned as an inline image."""
+    bn = media.has_bengali(request_text)
+    try:
+        if plan.op == "remove_bg":
+            png, _ = await asyncio.wait_for(asyncio.to_thread(photoedit.remove_background, data), timeout=80)
+            img, cap = photoedit.data_url(png, "image/png"), ("✅ ব্যাকগ্রাউন্ড সরানো হয়েছে" if bn else "✅ Background removed")
+        elif plan.op == "replace_bg":
+            desc = plan.background or ""
+            if desc and not desc.isascii():
+                desc = await asyncio.to_thread(photoedit.english_image_prompt, GEMINI_KEY, AI_MODEL, desc)
+            out, _, note = await asyncio.wait_for(
+                asyncio.to_thread(photoedit.replace_background, data, desc, False), timeout=100)
+            img = photoedit.data_url(out, "image/jpeg")
+            cap = (f"✅ নতুন ব্যাকগ্রাউন্ড: {plan.background}" if bn else f"✅ New background: {plan.background}")
+            if "gradient" in note:
+                cap += (" (ফ্রি ছবি-সার্ভার ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট)" if bn else " (free image server busy, gradient for now)")
+        else:
+            out, _ = await asyncio.wait_for(
+                asyncio.to_thread(photoedit.instruct_edit, data, plan.instruction or request_text), timeout=VIDEO_TIMEOUT)
+            img, cap = photoedit.data_url(out, "image/jpeg"), "✅ " + (plan.instruction or request_text)
+    except Exception as exc:
+        logger.warning("legacy photo edit failed: %s", exc)
+        return {"reply": UPDATE_NOTICE + ("দুঃখিত, ফ্রি এডিট-সার্ভার এখন ব্যস্ত, তাই ছবিটা বদলানো হয়নি। নতুন ভার্সনে আবার চেষ্টা করুন।"
+                                          if bn else "Sorry, the free editing server is busy, so the photo was NOT changed. Please try again in the new version.")}
+    return {"reply": f'{UPDATE_NOTICE}{cap}\n\n<img src="{img}" alt="edited photo" style="max-width:100%;height:auto;border-radius:12px">'}
 
 
 class FallbackImageIn(BaseModel):

@@ -276,17 +276,38 @@ def is_placeholder(data: bytes) -> bool:
         return False
 
 
-def english_image_prompt(api_key: str, model: str, text: str) -> str:
-    """Translate/expand a (Bengali or mixed) image request into an English image-generation prompt."""
+IMAGE_PROMPT_RULES = """You write prompts for a free text-to-image model (FLUX). Turn the user's request into ONE English prompt.
+Rules:
+- Keep the user's actual subject, objects, people, colours, style, setting and mood exactly; do not add unrelated subjects.
+- Use the recent conversation ONLY to resolve references like "it", "this", "same", "এটা", "ওটার", or when the user says
+  "make an image for that post" (then depict that post's topic). Ignore older, unrelated topics.
+- Make it specific and visual: subject first, then setting, composition/camera, lighting, colours, style.
+  For social-media posts/ads: clean modern composition with empty space for text, eye-catching, professional.
+- Text in the image: free image models cannot write Bengali/non-Latin script. If the user wants Bengali text, do NOT
+  ask for it; ask for clean empty space instead. When the user wants English words shown (a logo's brand name,
+  a poster title), include them exactly in double quotes, e.g. text "SocialGrowthLab" (max 5 words).
+  Otherwise add "no text, no watermark".
+- Avoid: extra fingers, distorted faces, blurry, low quality (say "sharp, high detail, well-proportioned").
+- Under 90 words. Reply with the prompt only, no quotes, no explanation."""
+
+
+def english_image_prompt(api_key: str, model: str, text: str, context: list[dict] | None = None) -> str:
+    """Rewrite an image request (any language, maybe referring to the chat) into a strong English FLUX prompt."""
     text = (text or "").strip()
-    if not text or not api_key or text.isascii():
+    if not text or not api_key:
         return text
+    if text.isascii() and len(text) > 220 and not context:
+        return text  # already a detailed English prompt (e.g. written by the chat model)
+    convo = ""
+    for m in (context or [])[-6:]:
+        c = str(m.get("content") or "").strip().replace("\n", " ")
+        if c:
+            convo += f"{'User' if m.get('role') == 'user' else 'Assistant'}: {c[:400]}\n"
+    req = (f"Recent conversation:\n{convo}\n" if convo else "") + f"Image request: {text[:1200]}"
     body = {
-        "contents": [{"role": "user", "parts": [{"text": (
-            "Rewrite the following image request as ONE detailed English prompt for an AI image generator "
-            "(subject, style, composition, lighting, colors). Keep any text the user wants written in the image "
-            "in its original language inside quotes. Reply with the prompt only.\n\nRequest: " + text[:1200])}]}],
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 300},
+        "systemInstruction": {"parts": [{"text": IMAGE_PROMPT_RULES}]},
+        "contents": [{"role": "user", "parts": [{"text": req}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 400},
     }
     for m in dict.fromkeys([model, "gemini-3.5-flash-lite", "gemini-3-flash-preview"]):
         try:
@@ -360,14 +381,15 @@ def flux_image(prompt: str, width: int = 1024, height: int = 1024) -> bytes | No
 
 def generate_image_free(prompt: str, width: int = 1024, height: int = 1024,
                         use_pollinations: bool = True) -> tuple[bytes, str] | None:
-    """Pollinations (with rate-limit retry) then FLUX.1-schnell. Returns (jpeg bytes, source)."""
+    """FLUX.1-schnell, then Pollinations (with rate-limit retry). Returns (jpeg bytes, source)."""
+    # FLUX.1-schnell gives clearly better, more faithful pictures than Pollinations' anonymous model (sana).
+    data = flux_image(prompt, width, height)
+    if data:
+        return data, "flux-schnell"
     if use_pollinations:
         data = pollinations_image(prompt, width, height)
         if data:
             return data, "pollinations"
-    data = flux_image(prompt, width, height)
-    if data:
-        return data, "flux-schnell"
     return None
 
 

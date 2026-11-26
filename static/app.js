@@ -22,6 +22,10 @@
       bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।",
       rec: "রেকর্ড হচ্ছে… থামাতে 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।",
       voiceWait: "শুনছি ও উত্তর তৈরি করছি…", tooShort: "রেকর্ডিং খুব ছোট, একটু বেশি সময় ধরে বলুন।", ttsWait: "ভয়েস তৈরি হচ্ছে…",
+      designing: "পোস্টের ডিজাইন তৈরি হচ্ছে…",
+      saveHint: "ছবিটা চেপে ধরে রাখুন, তারপর \"Save to Photos\" / \"ছবি সংরক্ষণ\" চাপুন",
+      saveHintVideo: "ভিডিওর শেয়ার বাটন চেপে \"Save Video\" চাপুন",
+      saveFail: "ডাউনলোড করা গেল না, আবার চেষ্টা করুন",
       cutFail: "দুঃখিত, ফ্রি ব্যাকগ্রাউন্ড-রিমুভ সার্ভারগুলো এখন ব্যস্ত, তাই ছবিটা বদলানো হয়নি। এক মিনিট পরে আবার চেষ্টা করুন।",
       leadThanks: "ধন্যবাদ! আপনার তথ্য পৌঁছে গেছে, Md Zahngir Hossain শিগগিরই যোগাযোগ করবেন।", photo: "📷 ছবি",
       chips: [["ইনস্টাগ্রাম ক্যাপশন", "আমার কফি শপের নতুন লাতে নিয়ে ৩টি ইনস্টাগ্রাম ক্যাপশন লিখে দাও"], ["ছবি বানাও", "একটা ইনস্টাগ্রাম পোস্টের ছবি বানাও: গোলাপি ব্যাকগ্রাউন্ডে স্ট্রবেরি আইসক্রিম কোন"],
@@ -43,6 +47,10 @@
       bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.",
       rec: "Recording… tap 🎤 to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.",
       voiceWait: "Listening and preparing a reply…", tooShort: "Recording too short — please speak a little longer.", ttsWait: "Creating voice…",
+      designing: "Designing your post…",
+      saveHint: "Press and hold the picture, then tap \"Save to Photos\"",
+      saveHintVideo: "Use the share button and tap \"Save Video\"",
+      saveFail: "Download failed, please try again",
       cutFail: "Sorry, the free background-removal servers are busy right now, so the photo was NOT changed. Please try again in a minute.",
       leadThanks: "Thank you! Your details were sent — Md Zahngir Hossain will contact you soon.", photo: "📷 Photo",
       chips: [["Instagram captions", "Write 3 Instagram captions for my coffee shop's new latte"], ["Create an image", "Make an image for an Instagram post: a strawberry ice cream cone on a pink background"],
@@ -59,6 +67,8 @@
   };
 
   let lang = localStorage.getItem(LS_LANG) || "bn";
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const fileCache = new Map();
   let sid = localStorage.getItem(LS_SID);
   if (!sid) { sid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/[^a-z0-9-]/gi, ""); localStorage.setItem(LS_SID, sid); }
   let chats = load();
@@ -112,7 +122,11 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  async function api(path, opts) { return fetch(API + path, opts); }
+  const CLIENT_VERSION = "11";
+  async function api(path, opts) {
+    opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, opts.headers || {});
+    return fetch(API + path, opts);
+  }
   async function errText(res) { try { const j = await res.json(); return typeof j.detail === "string" ? j.detail : t("netErr"); } catch { return t("netErr"); } }
   const nearBottom = () => els.scroller.scrollHeight - els.scroller.scrollTop - els.scroller.clientHeight < 140;
   function scrollEnd(force) { if (force || nearBottom()) requestAnimationFrame(() => { els.scroller.scrollTop = els.scroller.scrollHeight; }); }
@@ -243,6 +257,7 @@
     if (m.url && (m.type === "image" || m.type === "video")) {
       const d = document.createElement("a"); d.href = url(m.url); d.download = m.fname || (m.type === "video" ? "nexora.mp4" : "nexora.jpg"); d.target = "_blank"; d.rel = "noopener";
       d.innerHTML = `${ICON.down}<span>${esc(t("download"))}</span>`; a.appendChild(d);
+      if (IS_IOS) prepFile(d.href, d.download); // ready before the tap, so iOS keeps the gesture for share()
     }
     if (m.content && !m.error && !(m.aid && audioCache.has(m.aid)) && !m.type) {
       const sp = btn(ICON.listen, t("listen"), () => speak(m, body, sp));
@@ -412,11 +427,12 @@
       if (!res.ok) return null; const j = await res.json(); return j.url || null;
     } catch { return null; }
   }
-  // Pollinations (checked) -> FLUX in the browser -> FLUX on the server -> Pollinations again after its wait.
+  // FLUX.1-schnell from this browser (best quality; free quota per visitor) -> FLUX via the server ->
+  // Pollinations (checked, lower quality) -> Pollinations again after its wait.
   async function freeImage(pollUrl, prompt, w, h, onWait) {
-    let src = pollUrl ? await fetchRealImage(pollUrl, onWait, 1) : null;
-    if (!src) { onWait && onWait(t("altServer")); src = await browserFlux(prompt, w, h); }
-    if (!src) src = await serverFallbackImage(prompt, w, h);
+    let src = await browserFlux(prompt, w, h);
+    if (!src) { onWait && onWait(t("altServer")); src = await serverFallbackImage(prompt, w, h); }
+    if (!src && pollUrl) src = await fetchRealImage(pollUrl, onWait, 1);
     if (!src && pollUrl) src = await fetchRealImage(pollUrl + "&retry=1", onWait, 2);
     return src;
   }
@@ -424,9 +440,21 @@
   async function genImage(prompt, ref) {
     ref.m.regen = { kind: "image", prompt };
     try {
-      const res = await api("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+      const idx = chat().messages.indexOf(ref.m);
+      const context = idx > 0 ? historyPayload(idx - 1).slice(-6) : [];
+      const res = await api("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, context }) });
       if (!res.ok) throw new Error(await errText(res));
       const j = await res.json(); let src = j.url;
+      if (j.kind === "design") { // text post: AI paints a text-free background, the server typesets the exact words
+        setProgress(ref, t("designing"));
+        const bg = await freeImage(j.bg_url, j.bg_prompt, j.width, j.height, (x) => setProgress(ref, x));
+        setProgress(ref, t("designing"));
+        const r2 = await api("/api/design/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ spec: j.spec, background: bg && bg.startsWith("data:") ? bg : "" }) });
+        if (!r2.ok) throw new Error(await errText(r2));
+        src = (await r2.json()).url;
+        Object.assign(ref.m, { pending: false, type: "image", url: src, prompt: j.prompt || prompt, content: "", progress: "", error: false, fname: "nexora-post.png" });
+        refresh(ref); return;
+      }
       if (j.source === "pollinations-direct") {
         src = await freeImage(j.url, j.prompt || prompt, 1024, 1024, (x) => setProgress(ref, x));
         if (!src) throw new Error(t("allBusy"));
@@ -619,11 +647,62 @@
   function clearPhoto() { pendingPhoto = null; els.photoPreview.hidden = true; els.input.placeholder = t("placeholder"); }
   $("#removePhoto").onclick = clearPhoto;
 
-  // Android WebView can't download data: URLs itself; hand them to the app.
+  // ------------------------------------------------ downloads
+  // iPhone/iPad (Safari and home-screen PWA) ignore <a download>: share the file so "Save Image" appears,
+  // or show it full screen for a long-press save. Android WebView hands the file to the app (Download/Nexora).
+  // Desktop / Android browsers get a real file download through a blob: URL (works for cross-origin images).
+  async function toBlob(href) {
+    if (href.startsWith("data:") || href.startsWith("blob:") || href.startsWith(location.origin)) {
+      const r = await fetch(href); if (!r.ok) throw new Error("fetch " + r.status); return r.blob();
+    }
+    try { const r = await fetch(href, { mode: "cors", referrerPolicy: "no-referrer" }); if (r.ok) return await r.blob(); } catch (_) { }
+    const r = await api("/api/fetch-media?url=" + encodeURIComponent(href)); // same-origin proxy for CORS-less hosts
+    if (!r.ok) throw new Error("proxy " + r.status); return r.blob();
+  }
+  function prepFile(href, name) {
+    if (!fileCache.has(href)) {
+      const pr = toBlob(href).then((b) => {
+        let n = name || "nexora";
+        const ext = (b.type.split("/")[1] || "").replace("jpeg", "jpg").replace(/\W.*$/, "");
+        if (ext && !n.toLowerCase().endsWith("." + ext)) n = n.replace(/\.\w+$/, "") + "." + ext;
+        return new File([b], n, { type: b.type || "image/png" });
+      });
+      pr.catch(() => fileCache.delete(href));
+      fileCache.set(href, pr);
+    }
+    return fileCache.get(href);
+  }
+  function showViewer(src, isVideo) {
+    let v = document.getElementById("viewer");
+    if (!v) {
+      v = document.createElement("div"); v.id = "viewer";
+      v.innerHTML = `<button type="button" class="v-close" aria-label="close">✕</button><div class="v-body"></div><p class="v-hint"></p>`;
+      document.body.appendChild(v);
+      v.querySelector(".v-close").onclick = () => { v.hidden = true; v.querySelector(".v-body").innerHTML = ""; };
+    }
+    v.querySelector(".v-body").innerHTML = isVideo ? `<video src="${esc(src)}" controls playsinline></video>` : `<img src="${esc(src)}" alt="">`;
+    v.querySelector(".v-hint").textContent = t(isVideo ? "saveHintVideo" : "saveHint");
+    v.hidden = false;
+  }
+  async function saveMedia(href, name) {
+    let file;
+    try { file = await prepFile(href, name); } catch (e) { toast(t("saveFail")); return; }
+    if (window.NexoraAndroid && NexoraAndroid.saveFile) { NexoraAndroid.saveFile(await blobToDataURL(file), file.name); return; }
+    if (IS_IOS) {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); return; }
+        catch (e) { if (e && e.name === "AbortError") return; } // user closed the sheet
+      }
+      showViewer(URL.createObjectURL(file), file.type.startsWith("video")); return;
+    }
+    const u = URL.createObjectURL(file); const a = document.createElement("a");
+    a.href = u; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+  }
   document.addEventListener("click", (e) => {
     const a = e.target.closest && e.target.closest("a[download]");
-    if (!a || !a.href.startsWith("data:") || !(window.NexoraAndroid && NexoraAndroid.saveFile)) return;
-    e.preventDefault(); NexoraAndroid.saveFile(a.href, a.getAttribute("download") || "nexora");
+    if (!a || a.href.startsWith("blob:") && !IS_IOS && !window.NexoraAndroid) return;
+    e.preventDefault(); saveMedia(a.href, a.getAttribute("download") || "nexora");
   }, true);
 
   // ------------------------------------------------ lead form
@@ -655,7 +734,22 @@
   $("#clearAll").onclick = () => { if (confirm(t("confirmClear"))) { chats = {}; current = null; save(); newChat(); } };
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; $("#installBtn").hidden = false; });
   $("#installBtn").onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $("#installBtn").hidden = true; };
-  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((reg) => {
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+    }).catch(() => {});
+  }
+  // A phone can keep this page in memory for days: when it comes back, reload if a newer version is live.
+  async function checkVersion() {
+    if (busy || rec) return;
+    try {
+      const r = await fetch(API + "/api/health", { cache: "no-store" }); const j = await r.json();
+      if (j.app_version && Number(j.app_version) > Number(CLIENT_VERSION)) location.reload();
+    } catch {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkVersion(); });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) checkVersion(); });
+  if (/[?&]v=\d/.test(location.search)) history.replaceState(null, "", location.pathname);
   if (window.NexoraAndroid && /NexoraApp/.test(navigator.userAgent)) { $("#serverBtn").hidden = false; $("#serverBtn").onclick = () => window.NexoraAndroid.openSetup(); }
 
   // init
