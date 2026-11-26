@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import ai, design, media, photoedit, prompts, voice
+from sglbot import agent, ai, design, files as docfiles, media, photoedit, prompts, vault, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -86,6 +86,9 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "edit": [(4, 60), (40, 86400)],
     "imgfb": [(4, 60), (40, 86400)],
     "design": [(8, 60), (100, 86400)],
+    "extract": [(10, 60), (100, 86400)],
+    "vault": [(6, 60), (40, 86400)],
+    "vcode": [(2, 600), (6, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _rl_lock = threading.Lock()
@@ -93,7 +96,7 @@ _rl_lock = threading.Lock()
 
 PROXY_HOPS = max(1, int(os.getenv("TRUST_PROXY_HOPS", "1") or 1))
 # Whole-server daily caps (all visitors together) to protect the free quotas.
-_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000, "edit": 300, "imgfb": 300, "design": 800}
+_GLOBAL_DAILY = {"chat": 1500, "vision": 300, "image": 400, "video": 40, "lead": 200, "voice": 800, "tts": 1000, "edit": 300, "imgfb": 300, "design": 800, "extract": 600, "vault": 400, "vcode": 30}
 
 
 def client_ip(request: Request) -> str:
@@ -156,7 +159,8 @@ def clean_history(history: list[dict] | None) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for item in (history or [])[-MAX_HISTORY:]:
         role = item.get("role")
-        content = str(item.get("content") or "")[:4000]
+        raw = str(item.get("content") or "")
+        content = raw[:16000] if raw.startswith("[Attached file") else raw[:4000]
         if role in ("user", "assistant") and content.strip():
             out.append({"role": role, "content": content})
     return out
@@ -234,6 +238,32 @@ def notify_admin(lead: dict, source: str) -> bool:
         return False
 
 
+def tg_api(method: str, payload: dict) -> dict | None:
+    if not TG_TOKEN:
+        return None
+    req = urllib.request.Request(f"https://api.telegram.org/bot{TG_TOKEN}/{method}",
+                                 data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as exc:
+        logger.warning("Telegram %s failed: %s", method, type(exc).__name__)
+        return None
+
+
+def send_reminder_activation(chat_id: int, spec: dict) -> bool:
+    """Web reminders are run by the Telegram bot: send the spec with an Activate button (the bot receives the tap)."""
+    bn = spec.get("lang") == "bn"
+    kind = ("কাজ" if bn else "Task") if spec.get("task") else ("রিমাইন্ডার" if bn else "Reminder")
+    rep_ = {"none": "", "daily": " · daily", "weekdays": " · weekdays", "weekly": " · weekly"}.get(spec.get("repeat", "none"), "")
+    when = spec.get("at", "")[:16].replace("T", " ")
+    text = (f"⏰ Nexora web থেকে নতুন {kind}\n🕒 {when}{rep_}\n📝 {spec.get('text', '')[:600]}\n\nচালু করতে নিচের বাটনে চাপ দিন।" if bn else
+            f"⏰ New {kind} from Nexora web\n🕒 {when}{rep_}\n📝 {spec.get('text', '')[:600]}\n\nTap the button to activate it.")
+    r = tg_api("sendMessage", {"chat_id": chat_id, "text": text,
+                                "reply_markup": {"inline_keyboard": [[{"text": "✅ চালু করুন / Activate", "callback_data": f"rem:{spec['id']}"}]]}})
+    return bool(r and r.get("ok"))
+
+
 def record_lead(lead: dict, source: str, session: str) -> bool:
     append_lead_csv(lead, source, session)
     return notify_admin(lead, source)
@@ -301,15 +331,17 @@ class ChatIn(BaseModel):
     session_id: str = Field("anon", max_length=80)
     history: list[dict] = Field(default_factory=list)
     stream: bool = True
+    attachments: list[dict] = Field(default_factory=list)
+    tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "12"
+APP_VERSION = "13"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
 UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
                  "· *Tap the button to load the new version here.*\n\n"
-                 '<form action="/" method="get"><input type="hidden" name="v" value="12">'
+                 '<form action="/" method="get"><input type="hidden" name="v" value="13">'
                  '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
                  'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
@@ -320,7 +352,7 @@ def is_legacy(request: Request) -> bool:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app_version": APP_VERSION, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID), "bengali_text": design.shaping_ok()}
+    return {"ok": True, "app_version": APP_VERSION, "host": "vercel" if ON_VERCEL else "server", "model": AI_MODEL, "ai": bool(GEMINI_KEY), "lead_alerts": bool(TG_TOKEN and ADMIN_CHAT_ID), "bengali_text": design.shaping_ok(), "agent": True, "vault": vault.enabled(), "store": agent.store._blob_on()}
 
 
 AUTO_TOOLS = [prompts.SAVE_LEAD_TOOL, prompts.IMAGE_TOOL, prompts.VIDEO_TOOL]
@@ -338,11 +370,75 @@ def _media_action(calls: dict) -> dict | None:
     return None
 
 
-def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str):
+def _valid_tz(tz: str) -> str:
+    try:
+        from zoneinfo import ZoneInfo
+
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "Asia/Dhaka"
+
+
+def agent_ctx(request: Request, body: "ChatIn | None", text: str) -> agent.Ctx:
+    owner = vault.enabled() and vault.verify_owner_token(request.headers.get("x-nexora-owner"))
+    chat_id = vault.verify_link_token(request.headers.get("x-nexora-tg")) if vault.enabled() else None
+    tz = _valid_tz((body.tz if body else "") or request.headers.get("x-nexora-tz") or "Asia/Dhaka")
+    return agent.Ctx(platform="web", owner=bool(owner), tz=tz, bn=media.has_bengali(text), user_text=text,
+                     chat_id=chat_id, send_telegram=send_reminder_activation if TG_TOKEN else None)
+
+
+def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: agent.Ctx | None = None):
     """One chat box: stream a smart answer; the model may call image/video/lead tools."""
     sid = body.session_id
-    sys_prompt = system_prompt("auto", session_lead(sid)["lead"]) + "\n" + hint
+    actx = actx or agent.Ctx()
+    sys_prompt = system_prompt("auto", session_lead(sid)["lead"]) + "\n" + agent.system_addon(actx) + "\n" + hint
     messages = [{"role": "system", "content": sys_prompt}, *history, {"role": "user", "content": text}]
+    tools_all = AUTO_TOOLS + agent.tools_for("web", actx.owner)
+    lead_tool = make_lead_tool(sid)
+
+    def on_extra(name: str, args: dict):
+        if name in ("generate_image", "generate_video"):
+            p = (args.get("prompt") or "").strip()
+            if p:
+                return {"__stop__": {"action": "image" if name == "generate_image" else "video", "prompt": p[:1500]}}
+            return {"error": "empty prompt"}
+        return lead_tool(name, args)
+
+    def run_agent():
+        """Tool-using turn in a worker thread; progress/file events are streamed as they happen."""
+        import queue
+
+        q: queue.Queue = queue.Queue()
+        actx.emit = q.put
+        box: dict = {}
+
+        def work():
+            try:
+                box["out"] = agent.run(client, CFG, messages, actx, tools=tools_all, on_extra=on_extra, first_tool=forced)
+            except Exception as exc:
+                logger.exception("agent run failed")
+                box["err"] = exc
+            q.put(None)
+
+        threading.Thread(target=work, daemon=True).start()
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield ev(item)
+        out = box.get("out")
+        if isinstance(out, dict):
+            yield ev(out)
+            return
+        if not out and "err" in box:
+            yield ev({"error": friendly_ai_error()})
+            return
+        text_out = (out or "").strip()
+        if actx.appendix:
+            text_out += "\n\n" + "\n\n".join(a for a in actx.appendix if a)
+        for i in range(0, len(text_out), 400):
+            yield ev({"delta": text_out[i:i + 400]})
 
     def ev(obj: dict) -> str:
         return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
@@ -351,7 +447,13 @@ def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str):
         return ai.complete(client, CFG, system_prompt=sys_prompt, history=history, user_message=text,
                            tools=[prompts.SAVE_LEAD_TOOL], on_tool=make_lead_tool(sid)) or ""
 
+    forced = agent.forced_tool(text, tools_all)
+
     def gen():
+        if forced:  # the user clearly asked for a tool: go straight to the agent (no "done!" without doing it)
+            yield from run_agent()
+            yield ev({"done": True, "model": "agent"})
+            return
         chain = ai.model_chain(CFG)
         for i, model in enumerate(chain):
             last = i == len(chain) - 1
@@ -361,7 +463,7 @@ def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str):
                 try:
                     stream = ai.fast_client(client, last).chat.completions.create(
                         model=model, messages=messages, temperature=0.7, stream=True,
-                        tools=AUTO_TOOLS, tool_choice="auto",
+                        tools=tools_all, tool_choice="auto",
                     )
                     for chunk in stream:
                         if not chunk.choices:
@@ -376,7 +478,11 @@ def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str):
                                 ent["name"] += tc.function.name or ""
                                 ent["args"] += tc.function.arguments or ""
                     action = _media_action(calls)
-                    if action:
+                    if any(c["name"] in agent.AGENT_TOOL_NAMES for c in calls.values()):
+                        if sent:
+                            yield ev({"delta": "\n\n"})
+                        yield from run_agent()
+                    elif action:
                         yield ev(action)
                     elif any(c["name"] == "save_lead" for c in calls.values()):
                         reply = run_lead_turn()
@@ -419,9 +525,10 @@ async def chat(body: ChatIn, request: Request):
     if not text:
         raise HTTPException(400, "empty message")
     mode = body.mode if body.mode in MODES else "auto"
+    docs = [a for a in (body.attachments or []) if isinstance(a, dict) and a.get("text")][:3]
 
     # Natural-language media requests from chat-like modes are routed to the media endpoints.
-    if mode in ("auto", "chat", "caption"):
+    if mode in ("auto", "chat", "caption") and not docs:
         if media.looks_like_video_request(text):
             return JSONResponse({"action": "video", "prompt": media.extract_video_prompt(text) or text})
         if media.looks_like_image_request(text):
@@ -449,7 +556,16 @@ async def chat(body: ChatIn, request: Request):
         return JSONResponse({"reply": UPDATE_NOTICE + (reply or friendly_ai_error())})
 
     if mode in ("auto", "chat"):
-        return _auto_chat(body, text, history, hint)
+        actx = agent_ctx(request, body, text)
+        model_text = text
+        if docs:
+            budget = 60000
+            parts = []
+            for d in docs:
+                chunk = str(d.get("text") or "")[: max(2000, budget // len(docs))]
+                parts.append(f"[Attached file: {str(d.get('name') or 'file')[:120]}]\n{chunk}")
+            model_text = "\n\n".join(parts) + "\n\n[User message]\n" + text
+        return _auto_chat(body, model_text, history, hint, actx)
 
     if mode == "growth":
         s = session_lead(body.session_id)
@@ -760,8 +876,8 @@ async def _enhance(data: bytes, bn: bool) -> tuple[str, str, str]:
         out, src = await asyncio.to_thread(photoedit.enhance_local, data), "local-enhance"
     cmp = await asyncio.to_thread(photoedit.before_after, data, out, bn)
     how = ("AI রিস্টোর" if bn else "AI restore") if src != "local-enhance" else ("অটো-এনহান্স" if bn else "auto-enhance")
-    cap = (f"✅ ছবিটা আরও পরিষ্কার, উজ্জ্বল আর HD (২x) করা হয়েছে ({how})। বাঁয়ে আগে, ডানে পরে।"
-           if bn else f"✅ Photo enhanced: clearer, brighter colours and HD 2x ({how}). Left = before, right = after.")
+    cap = (f"✅ ছবিটা আরও পরিষ্কার, উজ্জ্বল আর HD (২x) করা হয়েছে। বাঁয়ে আগে, ডানে পরে।"
+           if bn else f"✅ Photo enhanced: clearer, brighter colours and HD 2x. Left = before, right = after.")
     return photoedit.data_url(out, "image/jpeg"), photoedit.data_url(cmp, "image/jpeg"), cap
 
 
@@ -891,6 +1007,133 @@ async def lead(body: LeadIn, request: Request):
 
 
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+
+
+# ---------------------------------------------------------------- agent: documents, Telegram link, owner vault
+MAX_DOC_BYTES = 4_000_000  # Vercel request bodies are limited to ~4.5 MB
+
+
+@app.post("/api/files/extract")
+async def files_extract(request: Request, file: UploadFile = File(...)):
+    check_rate(request, "extract")
+    data = await file.read(MAX_DOC_BYTES + 1)
+    if len(data) > MAX_DOC_BYTES:
+        raise HTTPException(413, "ফাইল খুব বড় (সর্বোচ্চ 4 MB) / File too large (max 4 MB)")
+    name = (file.filename or "file")[:160]
+    try:
+        text = await asyncio.to_thread(docfiles.extract_text, data, name, 120_000)
+    except Exception as exc:
+        logger.warning("extract failed: %s", exc)
+        raise HTTPException(415, "এই ফাইল পড়া যায়নি / Could not read this file (PDF, DOCX, XLSX, CSV, TXT)")
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(422, "ফাইলে কোনো লেখা পাওয়া যায়নি (স্ক্যান করা PDF?) / No text found (scanned PDF?)")
+    return {"name": name, "chars": len(text), "text": text[:60000], "truncated": len(text) > 60000}
+
+
+class LinkIn(BaseModel):
+    code: str = Field(..., max_length=80)
+
+
+@app.post("/api/link")
+def link_telegram(body: LinkIn, request: Request):
+    check_rate(request, "vault")
+    cid = vault.parse_link_code(body.code) if vault.enabled() else None
+    if not cid:
+        raise HTTPException(400, "কোডটি সঠিক নয় — Telegram বটে /link লিখে নতুন কোড নিন। / Invalid code — send /link to the bot for a new one.")
+    return {"token": vault.link_token(cid), "chat": f"…{str(cid)[-3:]}"}
+
+
+class PinIn(BaseModel):
+    pin: str = Field(..., max_length=64)
+    code: str = Field("", max_length=12)
+
+
+class VaultEntryIn(BaseModel):
+    name: str = Field(..., max_length=60)
+    value: str = Field("", max_length=8000)
+    note: str = Field("", max_length=300)
+
+
+def _require_owner(request: Request) -> None:
+    if not (vault.enabled() and vault.verify_owner_token(request.headers.get("x-nexora-owner"))):
+        raise HTTPException(401, "locked")
+
+
+@app.get("/api/vault/status")
+def vault_status(request: Request):
+    check_rate(request, "vault")
+    on = vault.enabled()
+    return {"enabled": on, "has_pin": on and vault.has_pin(),
+            "unlocked": on and vault.verify_owner_token(request.headers.get("x-nexora-owner"))}
+
+
+@app.post("/api/vault/setup-code")
+def vault_setup_code(request: Request):
+    """Send a one-time setup code to the owner's Telegram (ADMIN_CHAT_ID). Only the owner can read it."""
+    check_rate(request, "vcode")
+    if not (vault.enabled() and TG_TOKEN and ADMIN_CHAT_ID):
+        raise HTTPException(503, "vault not configured")
+    code = vault.setup_code()
+    r = tg_api("sendMessage", {"chat_id": int(ADMIN_CHAT_ID), "text":
+               f"🔐 Nexora Vault setup code: {code}\n(10 মিনিট বৈধ / valid 10 minutes)\n\nআপনি নিজে না চাইলে এটা উপেক্ষা করুন। "
+               "If you didn't request this, ignore it."})
+    if not (r and r.get("ok")):
+        raise HTTPException(502, "Telegram send failed")
+    return {"sent": True}
+
+
+@app.post("/api/vault/pin")
+def vault_set_pin(body: PinIn, request: Request):
+    check_rate(request, "vault")
+    if not vault.enabled():
+        raise HTTPException(503, "vault not configured")
+    if not vault.check_setup_code(body.code):
+        raise HTTPException(403, "সেটআপ কোড ভুল বা মেয়াদোত্তীর্ণ / Wrong or expired setup code")
+    try:
+        vault.set_pin(body.pin)
+    except vault.VaultError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "token": vault.issue_owner_token()}
+
+
+@app.post("/api/vault/unlock")
+def vault_unlock(body: PinIn, request: Request):
+    check_rate(request, "vault")
+    if not vault.enabled():
+        raise HTTPException(503, "vault not configured")
+    try:
+        ok = vault.check_pin(body.pin)
+    except vault.VaultError as exc:
+        raise HTTPException(429, str(exc))
+    if not ok:
+        raise HTTPException(403, "PIN ভুল / Wrong PIN")
+    return {"token": vault.issue_owner_token()}
+
+
+@app.get("/api/vault/list")
+def vault_list(request: Request):
+    _require_owner(request)
+    return {"entries": vault.list_entries()}
+
+
+@app.post("/api/vault/set")
+def vault_set(body: VaultEntryIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    try:
+        vault.set_entry(body.name, body.value, body.note)
+    except vault.VaultError as exc:
+        raise HTTPException(400, str(exc))
+    return {"entries": vault.list_entries()}
+
+
+@app.post("/api/vault/delete")
+def vault_delete(body: VaultEntryIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    vault.delete_entry(body.name)
+    return {"entries": vault.list_entries()}
 
 
 @app.get("/sw.js")

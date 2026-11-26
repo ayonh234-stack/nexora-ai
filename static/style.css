@@ -171,3 +171,35 @@ audio.voice-audio { display: block; width: 100%; max-width: 340px; height: 40px;
 #viewer .v-hint{color:#fff;font-size:15px;text-align:center;margin:14px 8px 0}
 #viewer .v-close{position:absolute;top:calc(10px + env(safe-area-inset-top));right:12px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:20px}
 .msg img.compare{margin-bottom:10px}
+
+/* agent */
+.steps { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.steps li { font-size: 13px; color: var(--muted); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; width: fit-content; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps li.live { color: var(--text); animation: pulse 1.2s ease-in-out infinite; }
+.steps li.ok::after { content: " ✓"; color: #22c55e; }
+@keyframes pulse { 50% { opacity: .55; } }
+.steps-done { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.steps-done summary { cursor: pointer; width: fit-content; }
+.steps-done .steps { margin-top: 6px; }
+.files { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.file-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); min-width: 220px; max-width: 100%; text-align: left; }
+.file-card:hover { background: var(--hover); }
+.file-card .fi { font-size: 24px; }
+.file-card .fn { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.file-card .fn b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-card .fn small { color: var(--muted); font-size: 12px; }
+.link-btn { display: inline-block; margin: 10px 0 4px; padding: 9px 16px; border-radius: 12px; background: var(--grad); color: #fff !important; font-weight: 600; text-decoration: none; }
+.doc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.doc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; max-width: 100%; }
+.msg.user .doc-chip { margin: 0 0 6px auto; }
+.doc-chip small { color: var(--muted); } .doc-chip button { font-size: 11px; opacity: .7; }
+.doc-chip.busy { animation: pulse 1.2s ease-in-out infinite; }
+.mini-steps { margin: 0 0 12px; padding-left: 20px; font-size: 14px; line-height: 1.7; } .mini-steps a { color: var(--accent, #7c5cff); }
+.ok-line { color: #22c55e; font-size: 14px; margin: 0 0 10px; }
+.mini { font-size: 13px; margin: -4px 0 6px; } .mini a { color: var(--muted); }
+.ghost-btn.wide { width: 100%; margin-bottom: 12px; }
+.vault-list { list-style: none; padding: 0; margin: 0 0 12px; max-height: 40vh; overflow: auto; }
+.vault-list li { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.vault-list li > span:first-child { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vault-list small { color: var(--muted); font-size: 12px; } .vault-list .vv { color: var(--muted); letter-spacing: 2px; }
+.vault-add summary { cursor: pointer; margin-bottom: 10px; font-weight: 600; }

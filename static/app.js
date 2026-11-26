@@ -16,8 +16,8 @@
       copy: "কপি", copied: "কপি হয়েছে", regen: "আবার লিখুন", listen: "শুনুন", download: "ডাউনলোড", rename: "নাম বদলান", del: "মুছুন",
       today: "আজ", yesterday: "গতকাল", week: "গত ৭ দিন", older: "আগের", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", noMatch: "কিছু পাওয়া যায়নি",
       confirmClear: "সব চ্যাট মুছে ফেলবেন?", confirmDel: "এই চ্যাটটি মুছবেন?", offline: "আপনি অফলাইনে আছেন", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।",
-      imgWait: "ছবি তৈরি হচ্ছে…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", editing: "ছবি দেখছি / এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
-      busy: "ফ্রি ছবি-সার্ভার ব্যস্ত, {s} সেকেন্ড পরে আবার চেষ্টা করছি…", altServer: "বিকল্প ফ্রি সার্ভারে চেষ্টা করছি…",
+      imgWait: "ছবি তৈরি করছি…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", editing: "ছবি এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
+      busy: "ছবি তৈরি করছি…", altServer: "ছবি তৈরি করছি…",
       allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।",
       bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।",
       rec: "রেকর্ড হচ্ছে… থামাতে 🎤 চাপুন", micDenied: "মাইক্রোফোনের অনুমতি দিন, তারপর আবার চেষ্টা করুন।", noMic: "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি।",
@@ -41,8 +41,8 @@
       copy: "Copy", copied: "Copied", regen: "Regenerate", listen: "Listen", download: "Download", rename: "Rename", del: "Delete",
       today: "Today", yesterday: "Yesterday", week: "Previous 7 days", older: "Older", untitled: "New chat", noHistory: "No chats yet", noMatch: "No matches",
       confirmClear: "Delete all chats?", confirmDel: "Delete this chat?", offline: "You are offline", netErr: "Network problem, please try again.",
-      imgWait: "Creating your image…", vidWait: "Creating your video (20–90s)…", editing: "Looking at / editing your photo…", bgMaking: "Creating the new background…",
-      busy: "Free image server is busy, retrying in {s}s…", altServer: "Trying a backup free server…",
+      imgWait: "Creating image…", vidWait: "Creating your video (20–90s)…", editing: "Editing your photo…", bgMaking: "Creating the new background…",
+      busy: "Creating image…", altServer: "Creating image…",
       allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.",
       bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.",
       rec: "Recording… tap 🎤 to stop", micDenied: "Please allow microphone access, then try again.", noMic: "No microphone found on this device.",
@@ -66,6 +66,30 @@
     trash: '<svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   };
 
+  Object.assign(T.bn, {
+    stepsDone: "ধাপ সম্পন্ন", fileGone: "ফাইলটি আর সংরক্ষিত নেই — আবার বানাতে বলুন", docReading: "ফাইল পড়ছি…", docBig: "ফাইল খুব বড় (সর্বোচ্চ 4 MB)",
+    docMax: "একসাথে সর্বোচ্চ ৩টি ফাইল", docQ: "ফাইলটি নিয়ে কী জানতে চান?", docDefault: "এই ফাইলটি সংক্ষেপে বুঝিয়ে বলো",
+    tgBtn: "Telegram লিংক (রিমাইন্ডার)", tgTitle: "Telegram লিংক করুন", tgSub: "রিমাইন্ডার ও প্রতিদিনের কাজ Nexora Telegram বটে পৌঁছায়। একবার লিংক করলে ওয়েব থেকে সেট করা রিমাইন্ডার সরাসরি আপনার Telegram-এ যাবে।",
+    tgStep1: "Nexora বট খুলুন (Start চাপুন)", tgStep2: "বট যে কোডটি দেবে সেটা নিচে বসান", tgCode: "লিংক কোড", tgLink: "লিংক করুন", tgUnlink: "লিংক বাদ দিন",
+    tgLinked: "✅ Telegram লিংক হয়েছে", tgIsLinked: "এই ব্রাউজার Telegram-এর সাথে লিংক করা আছে",
+    vTitle: "ভল্ট", vOff: "ভল্ট চালু নেই", vSetupTitle: "ভল্ট PIN সেট করুন", vSetupSub: "শুধু মালিকের জন্য। কোডটি আপনার (অ্যাডমিন) Telegram-এ যাবে।",
+    vSendCode: "Telegram-এ কোড পাঠাও", vCode: "৬ সংখ্যার কোড", vNewPin: "নতুন PIN (৬–১২ সংখ্যা বা ৮+ অক্ষরের পাসফ্রেজ)", vPin2: "PIN আবার লিখুন",
+    vSave: "সেভ", vCodeSent: "কোড পাঠানো হয়েছে — Telegram দেখুন", vMismatch: "দুটো PIN মেলেনি", vUnlockSub: "ভল্ট খুলতে PIN দিন।", vForgot: "PIN ভুলে গেছেন / প্রথমবার সেট করবেন?",
+    vUnlock: "খুলুন", vLocked: "ভল্ট লক — আবার PIN দিন", vEmpty: "এখনও কিছু রাখা হয়নি", vInfo: "সব কিছু এনক্রিপ্ট করে রাখা। Nexora কাজের সময় ব্যবহার করবে, কিন্তু কখনও মান দেখাবে না।",
+    vAdd: "নতুন যোগ করুন", vName: "নাম", vValue: "মান (পাসওয়ার্ড / API key)", vNote: "নোট (ঐচ্ছিক)", vLock: "লক", vDone: "ঠিক আছে", vDelQ: "মুছে ফেলবেন",
+  });
+  Object.assign(T.en, {
+    stepsDone: "steps done", fileGone: "file no longer stored — ask again to recreate it", docReading: "Reading file…", docBig: "File too large (max 4 MB)",
+    docMax: "Up to 3 files at once", docQ: "What do you want to know about the file?", docDefault: "Summarize this file",
+    tgBtn: "Telegram link (reminders)", tgTitle: "Link Telegram", tgSub: "Reminders and daily tasks are delivered by the Nexora Telegram bot. Link once and reminders you set on the web go straight to your Telegram.",
+    tgStep1: "Open the Nexora bot (tap Start)", tgStep2: "Paste the code the bot sends you below", tgCode: "Link code", tgLink: "Link", tgUnlink: "Unlink",
+    tgLinked: "✅ Telegram linked", tgIsLinked: "This browser is linked to Telegram",
+    vTitle: "Vault", vOff: "Vault is not enabled", vSetupTitle: "Set vault PIN", vSetupSub: "Owner only. The code is sent to your (admin) Telegram.",
+    vSendCode: "Send code to Telegram", vCode: "6-digit code", vNewPin: "New PIN (6–12 digits or an 8+ character passphrase)", vPin2: "Repeat PIN",
+    vSave: "Save", vCodeSent: "Code sent — check Telegram", vMismatch: "PINs don't match", vUnlockSub: "Enter your PIN to open the vault.", vForgot: "Forgot PIN / first-time setup?",
+    vUnlock: "Unlock", vLocked: "Vault locked — enter PIN again", vEmpty: "Nothing stored yet", vInfo: "Everything is encrypted. Nexora uses entries for tasks but never shows the values.",
+    vAdd: "Add new", vName: "Name", vValue: "Value (password / API key)", vNote: "Note (optional)", vLock: "Lock", vDone: "Done", vDelQ: "Delete",
+  });
   let lang = localStorage.getItem(LS_LANG) || "bn";
   const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const fileCache = new Map();
@@ -122,10 +146,18 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "12";
+  const CLIENT_VERSION = "13";
   async function api(path, opts) {
-    opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, opts.headers || {});
+    opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, agentHeaders(), opts.headers || {});
     return fetch(API + path, opts);
+  }
+  const LS_OWNER = "nexora.owner", LS_TG = "nexora.tg";
+  function ownerToken() { const tk = localStorage.getItem(LS_OWNER) || ""; const exp = Number(tk.split(".")[0]); return exp && exp * 1000 > Date.now() ? tk : ""; }
+  function agentHeaders() {
+    const h = {}; const o = ownerToken(), tg = localStorage.getItem(LS_TG);
+    if (o) h["X-Nexora-Owner"] = o; if (tg) h["X-Nexora-TG"] = tg;
+    try { h["X-Nexora-TZ"] = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Dhaka"; } catch (_) { }
+    return h;
   }
   async function errText(res) { try { const j = await res.json(); return typeof j.detail === "string" ? j.detail : t("netErr"); } catch { return t("netErr"); } }
   const nearBottom = () => els.scroller.scrollHeight - els.scroller.scrollTop - els.scroller.clientHeight < 140;
@@ -205,6 +237,7 @@
     if (m.role === "user") {
       const b = document.createElement("div"); b.className = "bubble";
       if (m.photo) { const im = document.createElement("img"); im.className = "upload"; im.src = m.photo; im.alt = "photo"; row.appendChild(im); }
+      (m.docs || []).forEach((d) => { const c = document.createElement("div"); c.className = "doc-chip"; c.textContent = "📄 " + d.name; row.appendChild(c); });
       if (m.content) { b.textContent = m.content; row.appendChild(b); }
       return row;
     }
@@ -216,7 +249,7 @@
   function fillBody(body, m) {
     body.innerHTML = "";
     if (m.pending && !m.content) {
-      body.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>${m.progress ? `<div class="progress">${esc(m.progress)}</div>` : ""}`;
+      body.innerHTML = stepsHtml(m, true) + `<span class="typing"><i></i><i></i><i></i></span>${m.progress ? `<div class="progress">${esc(m.progress)}</div>` : ""}`;
       return;
     }
     if ((m.type === "image" || m.type === "video") && m.url) {
@@ -226,10 +259,13 @@
       body.innerHTML = (m.content ? `<div class="md">${md(m.content)}</div>` : "") +
         (m.compare ? `<img class="gen compare" src="${esc(m.compare)}" alt="before / after">` : "") + media + (m.prompt ? `<div class="progress">${m.fname ? "✅" : m.type === "video" ? "🎬" : "🎨"} ${esc(m.prompt)}</div>` : "");
     } else {
+      if (m.steps && m.steps.length) body.insertAdjacentHTML("beforeend", stepsHtml(m, false));
       const div = document.createElement("div"); div.className = "md" + (m.error ? " err" : "") + (m.streaming ? " cursor" : "");
       div.innerHTML = md(m.content); body.appendChild(div);
       enhanceMd(div);
     }
+    if (m.files && m.files.length) body.appendChild(filesEl(m));
+    (m.links || []).forEach((l) => { const a = document.createElement("a"); a.className = "link-btn"; a.href = l.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = l.label; body.appendChild(a); });
     if (m.type === "image" && /^https?:\/\/image\.pollinations\.ai\//.test(m.url || "")) { // chats saved by older versions
       const im = body.querySelector("img.gen"); const legacy = m.url; im.removeAttribute("src"); im.style.minHeight = "120px";
       fetchRealImage(legacy, null, 1).then((du) => {
@@ -294,16 +330,20 @@
     const ms = chat().messages.slice(0, uptoIndex);
     return ms.filter((m) => !m.pending && !m.error).slice(-20).map((m) => ({
       role: m.role === "user" ? "user" : "assistant",
-      content: m.type === "image" ? `[Image shown to the user: ${m.prompt}]` : m.type === "video" ? `[Video shown to the user: ${m.prompt}]` : (m.photo ? `[photo] ${m.content || ""}` : m.content || ""),
+      content: m.type === "image" ? `[Image shown to the user: ${m.prompt}]` : m.type === "video" ? `[Video shown to the user: ${m.prompt}]` : (m.photo ? `[photo] ${m.content || ""}` :
+        m.docs && m.docs.length ? m.docs.map((d) => `[Attached file: ${d.name}]\n${(d.text || "(content no longer available)").slice(0, 12000)}`).join("\n\n") + "\n\n[User message]\n" + (m.content || "") :
+        (m.files && m.files.length ? m.content + "\n[Files sent: " + m.files.map((f) => f.name).join(", ") + "]" : m.content || "")),
     })).filter((m) => m.content.trim());
   }
 
-  async function sendChat(text, bot) {
+  async function sendChat(text, bot, docs) {
     const c = chat(); const idx = c.messages.indexOf(bot.m);
+    if (!docs) { const um = c.messages[idx - 1]; if (um && um.docs && um.docs.length && um.docs[0].text) docs = um.docs; }
     bot.m.regen = { kind: "chat", text };
     try {
       const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true }) });
+        body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true,
+          attachments: (docs || []).map((d) => ({ name: d.name, text: d.text || "" })) }) });
       if (!res.ok) throw new Error(await errText(res));
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("application/json")) {
@@ -323,6 +363,10 @@
           if (ev.delta) acc += ev.delta;
           if (ev.action) action = ev;
           if (ev.error) { bot.m.error = !acc; acc = acc ? acc + "\n\n" + ev.error : ev.error; }
+          if (ev.tool) { (bot.m.steps = bot.m.steps || []).push(ev.tool.label); if (!acc) refresh(bot); }
+          if (ev.file) { (bot.m.files = bot.m.files || []).push(ev.file); }
+          if (ev.link) { (bot.m.links = bot.m.links || []).push(ev.link); }
+          if (ev.tg_link) { localStorage.setItem(LS_TG, ev.tg_link); toast(t("tgLinked")); }
         }
         if (acc && !action) {
           Object.assign(bot.m, { content: acc, pending: false, streaming: true });
@@ -335,7 +379,7 @@
         if (acc.trim()) { Object.assign(bot.m, { content: acc, pending: false, streaming: false, regen: null }); refresh(bot); bot = push({ role: "assistant", content: "", pending: true }); }
         return mediaAction(action.action, action.prompt, bot);
       }
-      Object.assign(bot.m, { content: acc || t("netErr"), pending: false, streaming: false }); refresh(bot);
+      Object.assign(bot.m, { content: acc || ((bot.m.files || []).length ? "" : t("netErr")), pending: false, streaming: false }); refresh(bot);
     } catch (e) { Object.assign(bot.m, { pending: false, streaming: false, error: true, content: e.message || t("netErr") }); refresh(bot); }
   }
   function mediaAction(kind, prompt, bot) {
@@ -530,7 +574,8 @@
   async function submit() {
     if (busy) return;
     const text = els.input.value.trim();
-    if (!text && !pendingPhoto) return;
+    if (!text && !pendingPhoto && !pendingDocs.length) return;
+    if (docBusy) { toast(t("docReading")); return; }
     if (!navigator.onLine) { toast(t("offline")); return; }
     busy = true; setBusy(true);
     els.input.value = ""; autosize(); refreshPrevActions();
@@ -540,7 +585,14 @@
         push({ role: "user", content: text, photo: preview });
         const bot = push({ role: "assistant", content: "", pending: true });
         await sendPhoto(file, text, bot);
+      } else if (pendingDocs.length) {
+        const docs = pendingDocs.slice(); clearDocs();
+        const q = text || t("docDefault");
+        push({ role: "user", content: q, docs });
+        const bot = push({ role: "assistant", content: "", pending: true });
+        await sendChat(q, bot, docs);
       } else {
+        if (/^\/vault\b/i.test(text)) { openVault(); return; }
         push({ role: "user", content: text });
         const bot = push({ role: "assistant", content: "", pending: true });
         await sendChat(text, bot);
@@ -642,6 +694,7 @@
   }
   els.photoInput.onchange = async () => {
     const f = els.photoInput.files[0]; els.photoInput.value = ""; if (!f) return;
+    if (!/^image\//.test(f.type) || /\.(pdf|docx?|xlsx?|csv|txt|md|json|html?)$/i.test(f.name)) return attachDoc(f);
     pendingPhoto = await shrink(f); els.photoThumb.src = pendingPhoto.preview; els.photoPreview.hidden = false;
     els.input.placeholder = t("photoQ"); els.input.focus();
   };
@@ -688,12 +741,16 @@
   async function saveMedia(href, name) {
     let file;
     try { file = await prepFile(href, name); } catch (e) { toast(t("saveFail")); return; }
+    return saveFileObj(file);
+  }
+  async function saveFileObj(file) {
     if (window.NexoraAndroid && NexoraAndroid.saveFile) { NexoraAndroid.saveFile(await blobToDataURL(file), file.name); return; }
     if (IS_IOS) {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try { await navigator.share({ files: [file] }); return; }
         catch (e) { if (e && e.name === "AbortError") return; } // user closed the sheet
       }
+      if (!/^(image|video)\//.test(file.type)) { const u = URL.createObjectURL(file); window.open(u, "_blank"); return; }
       showViewer(URL.createObjectURL(file), file.type.startsWith("video")); return;
     }
     const u = URL.createObjectURL(file); const a = document.createElement("a");
@@ -721,6 +778,157 @@
     } catch (err) { toast(err.message || t("netErr")); }
     btn.disabled = false;
   };
+
+  // ------------------------------------------------ agent: tool steps, files, documents, Telegram link, owner vault
+  function stepsHtml(m, live) {
+    if (!m.steps || !m.steps.length) return "";
+    const items = m.steps.map((s, i) => `<li class="${live && i === m.steps.length - 1 ? "live" : "ok"}">${esc(s)}</li>`).join("");
+    return live ? `<ul class="steps">${items}</ul>` : `<details class="steps-done"><summary>⚙️ ${m.steps.length} ${esc(t("stepsDone"))}</summary><ul class="steps">${items}</ul></details>`;
+  }
+  const FILE_ICON = { pdf: "📕", docx: "📘", xlsx: "📗", csv: "📊", txt: "📄", md: "📄" };
+  function fileFromItem(f) {
+    const bin = atob(f.data); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new File([u8], f.name, { type: f.mime || "application/octet-stream" });
+  }
+  function filesEl(m) {
+    const wrap = document.createElement("div"); wrap.className = "files";
+    m.files.forEach((f) => {
+      const ext = (f.name.split(".").pop() || "").toLowerCase();
+      const card = document.createElement("button"); card.type = "button"; card.className = "file-card";
+      const kb = f.size ? (f.size > 1048576 ? (f.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(f.size / 1024)) + " KB") : "";
+      card.innerHTML = `<span class="fi">${FILE_ICON[ext] || "📎"}</span><span class="fn"><b>${esc(f.name)}</b><small>${esc(ext.toUpperCase())}${kb ? " · " + kb : ""}${f.data ? "" : " · " + esc(t("fileGone"))}</small></span>${ICON.down}`;
+      card.onclick = () => { if (!f.data) { toast(t("fileGone")); return; } saveFileObj(fileFromItem(f)); };
+      wrap.appendChild(card);
+    });
+    return wrap;
+  }
+  // Keep generated files in saved chats only while they are small (localStorage is ~5 MB).
+  const _save0 = save;
+  save = function () {
+    let total = 0;
+    Object.values(chats).sort((a, b) => b.updated - a.updated).forEach((c) => c.messages.forEach((m) => (m.files || []).forEach((f) => {
+      if (!f.data) return; total += f.data.length; if (total > 1500000) f.data = "";
+    })));
+    Object.values(chats).forEach((c) => c.messages.forEach((m) => (m.docs || []).forEach((d) => { if (d.text && d.text.length > 20000) d.text = d.text.slice(0, 20000); })));
+    _save0();
+  };
+
+  let pendingDocs = [], docBusy = false;
+  const docChips = document.createElement("div"); docChips.className = "doc-chips"; docChips.hidden = true;
+  els.photoPreview.parentNode.insertBefore(docChips, els.photoPreview.nextSibling);
+  function renderDocChips() {
+    docChips.innerHTML = ""; docChips.hidden = !pendingDocs.length && !docBusy;
+    pendingDocs.forEach((d, i) => {
+      const c = document.createElement("span"); c.className = "doc-chip";
+      c.innerHTML = `📄 ${esc(d.name)} <small>${Math.round(d.chars / 1000)}k</small> <button type="button" aria-label="remove">✕</button>`;
+      c.querySelector("button").onclick = () => { pendingDocs.splice(i, 1); renderDocChips(); };
+      docChips.appendChild(c);
+    });
+    if (docBusy) docChips.insertAdjacentHTML("beforeend", `<span class="doc-chip busy">⏳ ${esc(t("docReading"))}</span>`);
+  }
+  function clearDocs() { pendingDocs = []; renderDocChips(); }
+  async function attachDoc(f) {
+    if (f.size > 4000000) { toast(t("docBig")); return; }
+    if (pendingDocs.length >= 3) { toast(t("docMax")); return; }
+    docBusy = true; renderDocChips();
+    try {
+      const fd = new FormData(); fd.append("file", f, f.name);
+      const r = await api("/api/files/extract", { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await errText(r));
+      const j = await r.json(); pendingDocs.push({ name: j.name, chars: j.chars, text: j.text });
+      els.input.placeholder = t("docQ"); els.input.focus();
+    } catch (e) { toast(e.message || t("netErr")); }
+    docBusy = false; renderDocChips();
+  }
+  els.photoInput.setAttribute("accept", "image/*,.pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.json,.html,application/pdf");
+
+  // --- Telegram link (reminders from the web are delivered by the Nexora Telegram bot)
+  const BOT_URL = "https://t.me/SocialGrowthLabAI_bot";
+  function sheet(html) {
+    let d = document.getElementById("agentSheet");
+    if (!d) { d = document.createElement("dialog"); d.id = "agentSheet"; d.className = "sheet"; document.body.appendChild(d); }
+    d.innerHTML = html; if (!d.open) (d.showModal ? d.showModal() : d.setAttribute("open", ""));
+    d.querySelectorAll("[data-close]").forEach((b) => { b.onclick = () => d.close(); });
+    return d;
+  }
+  function openLink() {
+    closeSide();
+    const linked = !!localStorage.getItem(LS_TG);
+    const d = sheet(`<h2>📲 ${esc(t("tgTitle"))}</h2><p class="muted">${esc(t("tgSub"))}</p>
+      ${linked ? `<p class="ok-line">✅ ${esc(t("tgIsLinked"))}</p>` : ""}
+      <ol class="mini-steps"><li><a href="${BOT_URL}?start=link" target="_blank" rel="noopener">${esc(t("tgStep1"))}</a></li><li>${esc(t("tgStep2"))}</li></ol>
+      <label>${esc(t("tgCode"))}<input id="tgCode" placeholder="ABCD1234-XXXXXXXX" autocomplete="off" /></label>
+      <div class="sheet-actions">${linked ? `<button type="button" class="ghost-btn" id="tgUnlink">${esc(t("tgUnlink"))}</button>` : ""}
+      <button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="tgSave">${esc(t("tgLink"))}</button></div>`);
+    if (linked) d.querySelector("#tgUnlink").onclick = () => { localStorage.removeItem(LS_TG); d.close(); toast("✓"); };
+    d.querySelector("#tgSave").onclick = async () => {
+      try {
+        const r = await api("/api/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: d.querySelector("#tgCode").value.trim() }) });
+        if (!r.ok) throw new Error(await errText(r));
+        localStorage.setItem(LS_TG, (await r.json()).token); d.close(); toast(t("tgLinked"));
+      } catch (e) { toast(e.message); }
+    };
+  }
+
+  // --- Owner vault (hidden from regular users; open with #vault or by typing /vault)
+  async function vaultCall(path, body) {
+    const r = await api(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401) { localStorage.removeItem(LS_OWNER); throw new Error(t("vLocked")); }
+    if (!r.ok) throw new Error(await errText(r));
+    return r.json();
+  }
+  async function openVault(view) {
+    closeSide();
+    let st = { has_pin: true, unlocked: false, enabled: true };
+    try { st = await vaultCall("/api/vault/status"); } catch (e) { toast(e.message); }
+    if (!st.enabled) { toast(t("vOff")); return; }
+    if (st.unlocked && view !== "setup") return vaultUnlocked();
+    if (!st.has_pin || view === "setup") {
+      const d = sheet(`<h2>🔐 ${esc(t("vSetupTitle"))}</h2><p class="muted">${esc(t("vSetupSub"))}</p>
+        <button type="button" class="ghost-btn wide" id="vSend">📨 ${esc(t("vSendCode"))}</button>
+        <label>${esc(t("vCode"))}<input id="vCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" /></label>
+        <label>${esc(t("vNewPin"))}<input id="vPin" type="password" minlength="6" maxlength="64" autocomplete="new-password" /></label>
+        <label>${esc(t("vPin2"))}<input id="vPin2" type="password" maxlength="64" autocomplete="new-password" /></label>
+        <div class="sheet-actions"><button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="vSet">${esc(t("vSave"))}</button></div>`);
+      d.querySelector("#vSend").onclick = async (e) => { e.target.disabled = true; try { await vaultCall("/api/vault/setup-code", {}); toast(t("vCodeSent")); } catch (er) { toast(er.message); e.target.disabled = false; } };
+      d.querySelector("#vSet").onclick = async () => {
+        const pin = d.querySelector("#vPin").value; if (pin !== d.querySelector("#vPin2").value) { toast(t("vMismatch")); return; }
+        try { const j = await vaultCall("/api/vault/pin", { code: d.querySelector("#vCode").value.trim(), pin }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; vaultUnlocked(); }
+        catch (er) { toast(er.message); }
+      };
+      return;
+    }
+    const d = sheet(`<h2>🔐 ${esc(t("vTitle"))}</h2><p class="muted">${esc(t("vUnlockSub"))}</p>
+      <label>PIN<input id="vPin" type="password" maxlength="64" autocomplete="current-password" /></label>
+      <p class="mini"><a href="#" id="vForgot">${esc(t("vForgot"))}</a></p>
+      <div class="sheet-actions"><button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="vUnlock">${esc(t("vUnlock"))}</button></div>`);
+    d.querySelector("#vForgot").onclick = (e) => { e.preventDefault(); openVault("setup"); };
+    const go = async () => { try { const j = await vaultCall("/api/vault/unlock", { pin: d.querySelector("#vPin").value }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; vaultUnlocked(); } catch (er) { toast(er.message); } };
+    d.querySelector("#vUnlock").onclick = go; d.querySelector("#vPin").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
+  }
+  async function vaultUnlocked(entries) {
+    if (!entries) { try { entries = (await vaultCall("/api/vault/list")).entries; } catch (e) { toast(e.message); return openVault(); } }
+    const rows = entries.length ? entries.map((e) => `<li><span><b>${esc(e.name)}</b><small>${esc(e.note || "")} · ${esc(e.updated)}</small></span><span class="vv">••••••</span><button type="button" data-del="${esc(e.name)}" title="delete">${ICON.trash}</button></li>`).join("") : `<li class="muted">${esc(t("vEmpty"))}</li>`;
+    const d = sheet(`<h2>🔐 ${esc(t("vTitle"))}</h2><p class="muted">${esc(t("vInfo"))}</p><ul class="vault-list">${rows}</ul>
+      <details class="vault-add"><summary>➕ ${esc(t("vAdd"))}</summary>
+      <label>${esc(t("vName"))}<input id="vName" placeholder="OPENAI_KEY / IG_LOGIN" maxlength="48" autocomplete="off" /></label>
+      <label>${esc(t("vValue"))}<input id="vValue" type="password" maxlength="8000" autocomplete="off" /></label>
+      <label>${esc(t("vNote"))}<input id="vNote" maxlength="300" autocomplete="off" /></label>
+      <button type="button" class="primary-btn" id="vAddBtn">${esc(t("vSave"))}</button></details>
+      <div class="sheet-actions"><button type="button" class="ghost-btn" id="vLock">🔒 ${esc(t("vLock"))}</button><button type="button" class="primary-btn" data-close>${esc(t("vDone"))}</button></div>`);
+    d.querySelectorAll("[data-del]").forEach((b) => { b.onclick = async () => { if (!confirm(t("vDelQ") + " " + b.dataset.del + "?")) return; try { vaultUnlocked((await vaultCall("/api/vault/delete", { name: b.dataset.del })).entries); } catch (e) { toast(e.message); } }; });
+    d.querySelector("#vAddBtn").onclick = async () => {
+      try { vaultUnlocked((await vaultCall("/api/vault/set", { name: d.querySelector("#vName").value.trim(), value: d.querySelector("#vValue").value, note: d.querySelector("#vNote").value })).entries); toast("✓"); }
+      catch (e) { toast(e.message); }
+    };
+    d.querySelector("#vLock").onclick = () => { localStorage.removeItem(LS_OWNER); d.close(); toast("🔒"); };
+  }
+  const sideFoot = document.querySelector(".side-foot");
+  sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn" hidden>🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button>`);
+  $("#tgBtn").onclick = openLink; $("#vaultBtn").onclick = () => openVault();
+  if (ownerToken()) $("#vaultBtn").hidden = false;
+  if (/^#vault/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(() => openVault(), 300); }
+  if (/^#link/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(openLink, 300); }
 
   // ------------------------------------------------ wiring
   function autosize() { els.input.style.height = "auto"; els.input.style.height = Math.min(els.input.scrollHeight, 200) + "px"; }
