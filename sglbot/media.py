@@ -107,11 +107,52 @@ _VIDEO_STRIP = re.compile(
 )
 
 
+
+_BN_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
+_DURATION_WORD = re.compile(
+    r"""(?ix)
+    (?:^|\s)
+    (?:for\s+)?(?:a\s+)?(?:about\s+)?(?:around\s+)?
+    (?:10|5|দশ|পাঁচ|পাচ)
+    \s*(?:seconds?|secs?|s(?=[\s,.]|$)|সেকেন্ড(?:ের)?)
+    (?:\s*(?:long|length))?
+    """
+)
+_DURATION_BARE = re.compile(r"^(?:5|10)\s+")
+
+
+def parse_video_duration(text: str) -> float | None:
+    """Return 5 or 10 if the user named a length, else None."""
+    t = (text or "").translate(_BN_DIGITS)
+    if re.search(r"(?i)(?:^|\s)(?:দশ|10)\s*(?:s|secs?|seconds?|সেকেন্ড)", t):
+        return 10.0
+    if re.search(r"(?i)(?:^|\s)(?:পাঁচ|পাচ|5)\s*(?:s|secs?|seconds?|সেকেন্ড)", t):
+        return 5.0
+    m = re.search(r"(?i)^/video(?:@\w+)?\s+(5|10)\b", t)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+def resolve_video_duration(text: str = "", explicit: float | None = None, default: float = 10.0) -> float:
+    if explicit is not None:
+        try:
+            return 10.0 if float(explicit) >= 7.5 else 5.0
+        except (TypeError, ValueError):
+            pass
+    parsed = parse_video_duration(text)
+    return parsed if parsed is not None else (10.0 if default >= 7.5 else 5.0)
+
+
 def extract_video_prompt(text: str) -> str:
-    cleaned = (text or "").strip()
+    cleaned = (text or "").translate(_BN_DIGITS).strip()
     cleaned = re.sub(r"^/video(@\w+)?\s*", "", cleaned, flags=re.I).strip()
+    cleaned = _DURATION_BARE.sub("", cleaned)
+    cleaned = _DURATION_WORD.sub(" ", cleaned)
     cleaned = _VIDEO_STRIP.sub("", cleaned, count=1).strip(" \t.,:;-—")
     cleaned = _VIDEO_STRIP.sub("", cleaned, count=1).strip(" \t.,:;-—")
+    cleaned = _DURATION_WORD.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t.,:;-—")
     return cleaned
 
 
@@ -306,6 +347,7 @@ def understand_image(
 
 
 @dataclass
+
 class VideoResult:
     data: bytes
     mime: str
@@ -317,14 +359,18 @@ class VideoResult:
 # License (LTXV Open Weights 0.X) allows commercial/SaaS use for entities
 # under $10M annual revenue, subject to Attachment A use restrictions.
 # Unauthenticated ZeroGPU quota is about 2 minutes/day.
+# The Space slider max is 8.5s (257 frames at 30 fps); 10s clips are the
+# 8.5s take stretched slightly (~18%) so motion stays real, not a loop.
 LTX_SPACE = "Lightricks/ltx-video-distilled"
-VIDEO_TIMEOUT_SECONDS = 180
-DEFAULT_VIDEO_DURATION = 2.0
+LTX_SPACE_URL = "https://lightricks-ltx-video-distilled.hf.space"
+LTX_MAX_DURATION = 8.5
+VIDEO_TIMEOUT_SECONDS = 240
+DEFAULT_VIDEO_DURATION = 10.0
 
 
 def video_wait_message(user_text: str = "") -> str:
-    bn = "ছোট একটি ভিডিও বানাচ্ছি, এক-দুই মিনিট লাগতে পারে। অনুগ্রহ করে অপেক্ষা করুন।"
-    en = "I'm making a short video — this can take a minute or two. Please wait."
+    bn = "ভিডিও তৈরি করছি, এক-দুই মিনিট লাগতে পারে। অনুগ্রহ করে অপেক্ষা করুন।"
+    en = "I'm creating the video — this can take a minute or two. Please wait."
     if has_bengali(user_text) and not re.search(r"[A-Za-z]{4,}", user_text or ""):
         return bn
     if has_bengali(user_text):
@@ -336,12 +382,12 @@ def video_fail_message(user_text: str = "") -> str:
     bn = (
         "দুঃখিত, এই মুহূর্তে ভিডিও তৈরি করা যায়নি। "
         "ফ্রি কিউ ব্যস্ত থাকতে পারে — একটু পরে আবার চেষ্টা করুন। "
-        "ছোট ২ সেকেন্ডের ক্লিপ বানাতে /video দিয়ে বিষয়টা লিখুন।"
+        "৫ বা ১০ সেকেন্ডের ভিডিওর জন্য /video দিয়ে বিষয়টা লিখুন।"
     )
     en = (
         "Sorry, I couldn't create a video just now. "
         "The free queue may be busy — please try again in a little while. "
-        "Use /video plus a short description for a ~2 second clip."
+        "Use /video plus a short description for a 5 or 10 second clip."
     )
     if has_bengali(user_text) and not re.search(r"[A-Za-z]{4,}", user_text or ""):
         return bn
@@ -352,15 +398,161 @@ def video_fail_message(user_text: str = "") -> str:
 
 def video_prompt_needed_message() -> str:
     return (
-        "কীসের ভিডিও চাই, একটু বলে দিন। উদাহরণ: /video a red apple spinning  "
-        "অথবা  ভিডিও বানাও একটি লাল আপেল ঘুরছে।\n"
-        "Tell me what to film. Example: /video a red apple spinning  "
-        "or  ভিডিও বানাও একটি লাল আপেল ঘুরছে।"
+        "কীসের ভিডিও চাই, একটু বলে দিন। উদাহরণ: /video 10s a red apple spinning  "
+        "অথবা  ভিডিও বানাও ১০ সেকেন্ড একটি লাল আপেল ঘুরছে।\n"
+        "Tell me what to film. Example: /video 10s a red apple spinning  "
+        "or  ভিডিও বানাও ১০ সেকেন্ড একটি লাল আপেল ঘুরছে।"
     )
 
 
-def generate_video(prompt: str, duration: float = DEFAULT_VIDEO_DURATION) -> VideoResult:
-    """Generate a short MP4 via the official LTX-Video Hugging Face Space (free, no key)."""
+def video_duration_prompt() -> str:
+    return "কত সেকেন্ডের ভিডিও চাই? / How long should the video be?"
+
+
+def _ffprobe_duration(path: str) -> float | None:
+    import shutil
+    import subprocess
+
+    probe = shutil.which("ffprobe")
+    if not probe:
+        return None
+    try:
+        out = subprocess.check_output(
+            [probe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            timeout=20,
+        )
+        return float(out.strip())
+    except Exception:
+        return None
+
+
+def _scale_mp4_duration(data: bytes, factor: float) -> bytes:
+    """Rewrite media timestamps so the same frames play slower/faster (no re-encode)."""
+    if factor <= 0 or abs(factor - 1) < 0.01:
+        return data
+    buf = bytearray(data)
+
+    def boxes(start: int, end: int):
+        i = start
+        while i + 8 <= end:
+            size = int.from_bytes(buf[i : i + 4], "big")
+            typ = bytes(buf[i + 4 : i + 8])
+            hdr = 8
+            if size == 1:
+                if i + 16 > end:
+                    break
+                size = int.from_bytes(buf[i + 8 : i + 16], "big")
+                hdr = 16
+            elif size == 0:
+                size = end - i
+            if size < hdr or i + size > end:
+                break
+            yield i, hdr, size, typ
+            i += size
+
+    def u(off: int, n: int) -> int:
+        return int.from_bytes(buf[off : off + n], "big")
+
+    def setv(off: int, n: int, value: int) -> None:
+        buf[off : off + n] = int(max(0, value)).to_bytes(n, "big")
+
+    def scale_int(off: int, n: int) -> None:
+        setv(off, n, round(u(off, n) * factor))
+
+    def walk(start: int, end: int) -> None:
+        for i, hdr, size, typ in boxes(start, end):
+            body = i + hdr
+            if typ in (b"moov", b"trak", b"mdia", b"edts", b"minf", b"stbl"):
+                walk(body, i + size)
+                continue
+            if typ in (b"mvhd", b"mdhd"):
+                ver = buf[body]
+                if ver == 1:
+                    scale_int(body + 4 + 8 + 8 + 4, 8)
+                else:
+                    scale_int(body + 4 + 4 + 4 + 4, 4)
+            elif typ == b"tkhd":
+                ver = buf[body]
+                if ver == 1:
+                    scale_int(body + 4 + 8 + 8 + 4 + 4, 8)
+                else:
+                    scale_int(body + 4 + 4 + 4 + 4 + 4, 4)
+            elif typ == b"elst":
+                ver = buf[body]
+                count = u(body + 4, 4)
+                p = body + 8
+                for _ in range(count):
+                    if ver == 1:
+                        scale_int(p, 8)
+                        p += 20
+                    else:
+                        scale_int(p, 4)
+                        p += 12
+            elif typ == b"stts":
+                count = u(body + 4, 4)
+                p = body + 8
+                for _ in range(count):
+                    scale_int(p + 4, 4)
+                    p += 8
+
+    for i, hdr, size, typ in boxes(0, len(buf)):
+        if typ == b"moov":
+            walk(i + hdr, i + size)
+    return bytes(buf)
+
+
+def stretch_video_bytes(data: bytes, target: float) -> bytes:
+    """Stretch or leave an MP4 so its playback length is about `target` seconds."""
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    target = float(target)
+    if not data or b"ftyp" not in data[:16] or target <= 0:
+        return data
+
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "in.mp4"
+        dst = Path(td) / "out.mp4"
+        src.write_bytes(data)
+        actual = _ffprobe_duration(str(src))
+        if actual and actual >= target - 0.15:
+            return data
+        # Guess 8.5s LTX cap when ffprobe is missing.
+        if not actual:
+            actual = LTX_MAX_DURATION
+        if actual >= target - 0.15:
+            return data
+        factor = target / actual
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg:
+            try:
+                # Copy + timestamp scale: same frames, slightly slower motion, no quality loss.
+                subprocess.check_call(
+                    [ffmpeg, "-y", "-itsscale", f"{factor:.8f}", "-i", str(src),
+                     "-c", "copy", "-an", "-movflags", "+faststart", str(dst)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60,
+                )
+                out = dst.read_bytes()
+                got = _ffprobe_duration(str(dst))
+                if out and b"ftyp" in out[:16] and (got is None or got >= target - 0.35):
+                    return out
+            except Exception:
+                logger.warning("ffmpeg itsscale stretch failed, trying Python scale")
+        scaled = _scale_mp4_duration(data, factor)
+        if scaled and b"ftyp" in scaled[:16]:
+            return scaled
+        return data
+
+
+def generate_video(prompt: str, duration: float | None = None) -> VideoResult:
+    """Generate an MP4 via the official LTX-Video Hugging Face Space (free, no key).
+
+    The Space itself tops out at 8.5 seconds. A 10 second request generates 8.5s
+    and stretches it slightly so the motion stays real (not a loop).
+    """
     from pathlib import Path
 
     from gradio_client import Client
@@ -368,12 +560,18 @@ def generate_video(prompt: str, duration: float = DEFAULT_VIDEO_DURATION) -> Vid
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("empty prompt")
-    duration = min(max(float(duration), 1.0), 4.0)
+    duration = resolve_video_duration(prompt, duration)
+    ltx_duration = LTX_MAX_DURATION if duration >= 10 else 5.0
 
     import os
 
     hf_token = (os.getenv("HF_TOKEN") or "").strip() or None
-    client = Client(LTX_SPACE, token=hf_token) if hf_token else Client(LTX_SPACE)
+    client = Client(
+        LTX_SPACE,
+        token=hf_token,
+        verbose=False,
+        httpx_kwargs={"timeout": float(VIDEO_TIMEOUT_SECONDS)},
+    )
     result = client.predict(
         prompt=prompt,
         negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted",
@@ -382,7 +580,7 @@ def generate_video(prompt: str, duration: float = DEFAULT_VIDEO_DURATION) -> Vid
         height_ui=512,
         width_ui=704,
         mode="text-to-video",
-        duration_ui=duration,
+        duration_ui=ltx_duration,
         ui_frames_to_use=9,
         seed_ui=0,
         randomize_seed=True,
@@ -400,4 +598,6 @@ def generate_video(prompt: str, duration: float = DEFAULT_VIDEO_DURATION) -> Vid
     data = src.read_bytes()
     if b"ftyp" not in data[:16]:
         raise RuntimeError("LTX Space did not return an MP4")
+    if duration > ltx_duration + 0.15:
+        data = stretch_video_bytes(data, duration)
     return VideoResult(data, "video/mp4", f"hf-space:{LTX_SPACE}", "nexora.mp4")

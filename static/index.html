@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>try{var th=localStorage.getItem("nexora.theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.dataset.theme=th;}catch(e){}</script>
-  <link rel="stylesheet" href="/style.css?v=19" />
+  <link rel="stylesheet" href="/style.css?v=20" />
 </head>
 <body>
   <div class="layout" id="layout">
@@ -76,6 +76,10 @@
               <input type="file" id="photoInput" accept="image/*" hidden />
               <svg class="ico" viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l8-8" /></svg>
             </label>
+            <div class="dur-toggle" id="vidDur" title="ভিডিওর দৈর্ঘ্য / Video length" role="group" aria-label="Video length">
+              <button type="button" data-dur="5">5স</button>
+              <button type="button" data-dur="10" class="on">10স</button>
+            </div>
             <span class="rec-status" id="recStatus"></span>
             <button class="tool-btn mic" id="micBtn" type="button" title="Voice" aria-label="Record voice message">
               <svg class="ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" /></svg>
@@ -110,6 +114,6 @@
   <script src="/vendor/marked.min.js"></script>
   <script src="/vendor/purify.min.js"></script>
   <script src="/config.js"></script>
-  <script src="/app.js?v=19"></script>
+  <script src="/app.js?v=20"></script>
 </body>
 </html>

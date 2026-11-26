@@ -16,7 +16,7 @@
       copy: "কপি", copied: "কপি হয়েছে", regen: "আবার লিখুন", listen: "শুনুন", download: "ডাউনলোড", rename: "নাম বদলান", del: "মুছুন",
       today: "আজ", yesterday: "গতকাল", week: "গত ৭ দিন", older: "আগের", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", noMatch: "কিছু পাওয়া যায়নি",
       confirmClear: "সব চ্যাট মুছে ফেলবেন?", confirmDel: "এই চ্যাটটি মুছবেন?", offline: "আপনি অফলাইনে আছেন", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।", netRetry: "সংযোগ যায়নি, আবার চেষ্টা করছি…",
-      imgWait: "ছবি তৈরি করছি…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", editing: "ছবি এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
+      imgWait: "ছবি তৈরি করছি…", vidWait: "ভিডিও তৈরি করছি…", editing: "ছবি এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
       busy: "ছবি তৈরি করছি…", altServer: "ছবি তৈরি করছি…",
       allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।",
       bgFallback: "ফ্রি ব্যাকগ্রাউন্ড-সার্ভার এখন ব্যস্ত, তাই আপাতত গ্রেডিয়েন্ট ব্যাকগ্রাউন্ড দিলাম। কিছুক্ষণ পরে আবার চাইলে আসল দৃশ্য দিতে পারব।",
@@ -41,7 +41,7 @@
       copy: "Copy", copied: "Copied", regen: "Regenerate", listen: "Listen", download: "Download", rename: "Rename", del: "Delete",
       today: "Today", yesterday: "Yesterday", week: "Previous 7 days", older: "Older", untitled: "New chat", noHistory: "No chats yet", noMatch: "No matches",
       confirmClear: "Delete all chats?", confirmDel: "Delete this chat?", offline: "You are offline", netErr: "Network problem, please try again.", netRetry: "Connection dropped, retrying…",
-      imgWait: "Creating image…", vidWait: "Creating your video (20–90s)…", editing: "Editing your photo…", bgMaking: "Creating the new background…",
+      imgWait: "Creating image…", vidWait: "Creating video…", editing: "Editing your photo…", bgMaking: "Creating the new background…",
       busy: "Creating image…", altServer: "Creating image…",
       allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.",
       bgFallback: "The free background server is busy, so I used a gradient for now. Ask again in a little while for the real scene.",
@@ -121,6 +121,7 @@
     layout: $("#layout"), scroller: $("#scroller"), thread: $("#thread"), input: $("#input"), form: $("#composer"), send: $("#sendBtn"),
     mic: $("#micBtn"), recStatus: $("#recStatus"), history: $("#history"), search: $("#search"), photoInput: $("#photoInput"),
     photoPreview: $("#photoPreview"), photoThumb: $("#photoThumb"), toast: $("#toast"), leadDialog: $("#leadDialog"), leadForm: $("#leadForm"),
+    vidDur: $("#vidDur"),
   };
   const t = (k) => (T[lang] || T.bn)[k];
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -164,7 +165,7 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "19";
+  const CLIENT_VERSION = "20";
   const BURNED_PIN = "521901";
   function normalizeDigits(text) {
     const map = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
@@ -455,6 +456,24 @@
       }
     }
   }
+  const LS_VIDDUR = "nexora.videoDuration";
+  function parseVidDur(text) {
+    const s = (text || "").replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
+    if (/(?:^|\s)(?:10|দশ)\s*(?:s|secs?|seconds?|সেকেন্ড)/i.test(s)) return 10;
+    if (/(?:^|\s)(?:5|পাঁচ|পাচ)\s*(?:s|secs?|seconds?|সেকেন্ড)/i.test(s)) return 5;
+    return 0;
+  }
+  function videoDurPref() {
+    try { const n = +localStorage.getItem(LS_VIDDUR); if (n === 5 || n === 10) return n; } catch {}
+    return 10;
+  }
+  function chosenVideoDuration(prompt) { return parseVidDur(prompt) || videoDurPref(); }
+  function setVideoDurPref(n) {
+    const d = n >= 7.5 ? 10 : 5;
+    try { localStorage.setItem(LS_VIDDUR, String(d)); } catch {}
+    if (els.vidDur) els.vidDur.querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.dur === d));
+    return d;
+  }
   function mediaAction(kind, prompt, bot) {
     Object.assign(bot.m, { pending: true, content: "", progress: kind === "image" ? t("imgWait") : t("vidWait") }); refresh(bot);
     return kind === "video" ? genVideo(prompt, bot) : genImage(prompt, bot);
@@ -515,6 +534,8 @@
     } finally { clearTimeout(timer); }
   }
   async function hfFile(host, item) {
+    if (typeof item === "string") item = { path: item };
+    else if (item && (item.video || item.path || item.url) && !item.path && item.video) item = typeof item.video === "string" ? { path: item.video } : item.video;
     const u = item && item.path ? `${host}/gradio_api/file=${item.path}` : item && item.url;
     const r = await fetch(u); if (!r.ok) throw new Error("hf file " + r.status);
     return blobToDataURL(await r.blob());
@@ -581,15 +602,40 @@
     } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     refresh(ref);
   }
-  async function genVideo(prompt, ref) {
-    ref.m.regen = { kind: "video", prompt };
-    const started = Date.now();
-    const timer = setInterval(() => setProgress(ref, `${t("vidWait")} ${Math.round((Date.now() - started) / 1000)}s`), 1000);
+  const LTX = "https://lightricks-ltx-video-distilled.hf.space";
+  async function browserLtx(prompt, ltxDur) {
+    const data = [prompt.slice(0, 700), "worst quality, inconsistent motion, blurry, jittery, distorted",
+      null, null, 512, 704, "text-to-video", ltxDur, 9, 0, true, 1, false];
+    const res = await hfCall(LTX, "text_to_video", data, 200000);
+    const item = res && res[0];
+    if (!item) throw new Error("empty");
+    return hfFile(LTX, item);
+  }
+  async function extendVideo(dataUrl, duration) {
     try {
-      const res = await api("/api/video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
-      if (!res.ok) throw new Error(await errText(res));
+      const res = await api("/api/video/extend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data_url: dataUrl, duration }) });
+      if (!res.ok) return dataUrl;
       const j = await res.json();
-      Object.assign(ref.m, { pending: false, type: "video", url: j.url, prompt: j.prompt || prompt, content: "", progress: "", error: false });
+      return j.url || dataUrl;
+    } catch { return dataUrl; }
+  }
+  async function genVideo(prompt, ref) {
+    const duration = (ref.m.regen && ref.m.regen.duration) || chosenVideoDuration(prompt);
+    ref.m.regen = { kind: "video", prompt, duration };
+    const timer = setInterval(() => setProgress(ref, t("vidWait")), 1000);
+    try {
+      let src = null;
+      try { src = await browserLtx(prompt, duration >= 10 ? 8.5 : 5); } catch {}
+      if (src && duration >= 10) src = await extendVideo(src, 10);
+      if (!src) {
+        const res = await api("/api/video", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, duration }) });
+        if (!res.ok) throw new Error(await errText(res));
+        const j = await res.json();
+        src = j.url;
+        prompt = j.prompt || prompt;
+      }
+      if (!src) throw new Error(t("netErr"));
+      Object.assign(ref.m, { pending: false, type: "video", url: src, prompt, content: "", progress: "", error: false, fname: "nexora.mp4" });
     } catch (e) { Object.assign(ref.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     clearInterval(timer); refresh(ref);
   }
@@ -1083,6 +1129,13 @@
   els.input.addEventListener("input", autosize);
   els.input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(pointer:fine)").matches) { e.preventDefault(); submit(); } });
   els.form.onsubmit = (e) => { e.preventDefault(); submit(); };
+  if (els.vidDur) {
+    setVideoDurPref(videoDurPref());
+    els.vidDur.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-dur]"); if (!b) return;
+      setVideoDurPref(+b.dataset.dur);
+    });
+  }
   $("#openSide").onclick = openSide; $("#closeSide").onclick = closeSide; $("#scrim").onclick = closeSide;
   $("#newChat").onclick = newChat; $("#newChatTop").onclick = newChat;
   els.search.addEventListener("input", () => { query = els.search.value; renderHistory(); });

@@ -120,6 +120,9 @@ audio.voice-audio { display: block; width: 100%; max-width: 340px; height: 40px;
 .composer-bar { display: flex; align-items: center; gap: 4px; margin-top: 6px; margin-left: -8px; }
 .tool-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--text); cursor: pointer; }
 .tool-btn:hover { background: var(--hover); }
+.dur-toggle { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 0 4px 0 2px; flex: none; }
+.dur-toggle button { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 5px 9px; cursor: pointer; }
+.dur-toggle button.on { background: var(--text); color: var(--bg); }
 .rec-status { flex: 1; font-size: 13px; color: var(--danger); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-btn.mic.recording { background: #ef4444; color: #fff; animation: micPulse 1.2s infinite; }
 @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); } 70% { box-shadow: 0 0 0 12px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }

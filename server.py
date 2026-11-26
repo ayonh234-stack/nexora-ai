@@ -355,7 +355,7 @@ class ChatIn(BaseModel):
     tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "19"
+APP_VERSION = "20"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
@@ -664,6 +664,12 @@ async def chat(body: ChatIn, request: Request):
 class MediaIn(BaseModel):
     prompt: str = Field(..., max_length=1500)
     context: list[dict] = Field(default_factory=list)  # recent chat turns, to resolve "it"/"that post"
+    duration: float | None = None
+
+
+class VideoExtendIn(BaseModel):
+    data_url: str = Field(..., max_length=20_000_000)
+    duration: float = 10.0
 
 
 @app.post("/api/image")
@@ -752,9 +758,10 @@ async def video(body: MediaIn, request: Request):
     prompt = media.extract_video_prompt(body.prompt) or body.prompt.strip()
     if not prompt:
         raise HTTPException(400, "empty prompt")
+    duration = media.resolve_video_duration(body.prompt, body.duration)
     try:
         res = await asyncio.wait_for(
-            asyncio.to_thread(media.generate_video, prompt), timeout=VIDEO_TIMEOUT
+            asyncio.to_thread(media.generate_video, prompt, duration), timeout=VIDEO_TIMEOUT
         )
     except Exception as exc:
         logger.exception("video failed")
@@ -764,7 +771,26 @@ async def video(body: MediaIn, request: Request):
             raise HTTPException(503, "আজকের ফ্রি ভিডিও কোটা শেষ হয়ে গেছে, কিছুক্ষণ পরে (বা আগামীকাল) আবার চেষ্টা করুন।\n\n"
                                      "Today's free video quota is used up — please try again later (or tomorrow).")
         raise HTTPException(502, media.video_fail_message(body.prompt).replace("/video", "Video mode"))
-    return {"url": save_media(res.data, "mp4"), "source": res.source, "prompt": prompt}
+    return {"url": save_media(res.data, "mp4"), "source": res.source, "prompt": prompt, "duration": duration}
+
+
+@app.post("/api/video/extend")
+async def video_extend(body: VideoExtendIn, request: Request):
+    """Stretch a generated MP4 (e.g. LTX 8.5s) to the requested 5s/10s length. Fast, no GPU."""
+    check_rate(request, "video")
+    raw = (body.data_url or "").strip()
+    if "," in raw and raw.startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    import base64
+    try:
+        data = base64.b64decode(raw)
+    except Exception:
+        raise HTTPException(400, "invalid video")
+    if len(data) > 20_000_000 or b"ftyp" not in data[:16]:
+        raise HTTPException(400, "invalid video")
+    duration = 10.0 if float(body.duration or 10) >= 7.5 else 5.0
+    out = await asyncio.to_thread(media.stretch_video_bytes, data, duration)
+    return {"url": save_media(out, "mp4"), "duration": duration}
 
 
 @app.post("/api/vision")
