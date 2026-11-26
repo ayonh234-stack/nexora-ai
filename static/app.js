@@ -261,7 +261,7 @@
     if (!c.renamed && m.role === "user" && (!c.title || c.title === t("photo"))) c.title = autoTitle(m);
     if (c.messages.length === 1) els.thread.innerHTML = "";
     const el = msgEl(m); els.thread.appendChild(el);
-    save(); renderHistory(); scrollEnd(true);
+    save(); renderHistory(); scrollEnd(true); refreshPrevActions();
     return { m, el };
   }
   function autoTitle(m) {
