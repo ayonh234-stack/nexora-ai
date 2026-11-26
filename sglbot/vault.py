@@ -124,29 +124,114 @@ def has_pin() -> bool:
     return bool(store.get("vault/pin", None))
 
 
-def setup_code(window: int | None = None) -> str:
-    """6-digit one-time code (valid ~10-20 min) sent to the owner's Telegram to authorise PIN setup/reset."""
-    w = int(time.time() // 600) if window is None else window
-    return str(int(_hmac(f"setup|{w}")[:10], 16) % 1_000_000).zfill(6)
-
-
-def check_setup_code(code: str) -> bool:
-    w = int(time.time() // 600)
-    return any(hmac.compare_digest((code or "").strip(), setup_code(x)) for x in (w, w - 1))
-
-
+# Bengali + Arabic-Indic digits → ASCII, so a code typed as ১২৩৪৫৬ still matches.
+_DIGIT_TRANS = str.maketrans("০১২৩৪৫৬৭৮৯٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+SETUP_TTL = 10 * 60  # seconds; codes live in Blob so every serverless instance sees the same set
+SETUP_KEEP = 3
 BURNED_PINS = frozenset({"521901"})
+# Same policy as the Telegram bot: exposed or trivial PINs are rejected.
+_WEAK_EXACT = frozenset({"521901", "123456", "654321", "000000", "111111", "123123", "112233", "121212"})
+
+
+def normalize_digits(text: str) -> str:
+    return (text or "").translate(_DIGIT_TRANS).strip()
+
+
+def is_weak_pin(pin: str) -> bool:
+    p = normalize_digits(pin)
+    if p in _WEAK_EXACT or p in BURNED_PINS:
+        return True
+    if p.isdigit() and (len(set(p)) == 1 or p in "01234567890123" or p in "98765432109876"):
+        return True
+    return False
+
+
+def _load_setup() -> list[dict]:
+    box = store.get("vault/setup_codes", None)
+    data = _dec(box) if box else {}
+    recs = data.get("codes") if isinstance(data, dict) else data
+    return list(recs or [])
+
+
+def _save_setup(recs: list[dict]) -> None:
+    store.put("vault/setup_codes", _enc({"codes": recs}))
+
+
+def issue_setup_code() -> str:
+    """Mint a random 6-digit code, persist the last 3 in Blob (TTL 10 min)."""
+    now = time.time()
+    recs = [r for r in _load_setup() if float(r.get("exp") or 0) > now]
+    for _ in range(20):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        if not is_weak_pin(code):
+            break
+    recs.append({"c": code, "exp": now + SETUP_TTL, "t": now})
+    _save_setup(recs[-SETUP_KEEP:])
+    return code
+
+
+def check_setup_code(code: str) -> str:
+    """Return 'ok', 'wrong', 'expired', or 'missing' (no code has been issued). Does not consume the code."""
+    raw = normalize_digits(code)
+    recs = _load_setup()
+    if not raw:
+        return "missing"
+    if not recs:
+        return "missing"
+    now = time.time()
+    live = [r for r in recs if float(r.get("exp") or 0) > now]
+
+    def _hit(rows: list[dict]) -> bool:
+        if len(raw) < 4:
+            return False
+        for r in rows:
+            c = normalize_digits(str(r.get("c") or ""))
+            if len(c) == len(raw) and hmac.compare_digest(c, raw):
+                return True
+        return False
+
+    if _hit(live):
+        return "ok"
+    if _hit(recs):
+        return "expired"
+    return "wrong" if live else "expired"
+
+
+def consume_setup_code(code: str) -> None:
+    raw = normalize_digits(code)
+    kept = []
+    for r in _load_setup():
+        c = normalize_digits(str(r.get("c") or ""))
+        if len(c) == len(raw) and hmac.compare_digest(c, raw):
+            continue
+        kept.append(r)
+    _save_setup(kept)
+
+
+# Back-compat alias (older callers expected a 6-digit string).
+def setup_code(window: int | None = None) -> str:
+    return issue_setup_code()
 
 
 def set_pin(pin: str) -> None:
-    if (pin or "").strip() in BURNED_PINS:
-        raise VaultError("this PIN was exposed — please choose a different one")
+    pin = normalize_digits(pin)
+    if pin in BURNED_PINS or pin == "521901":
+        raise VaultError("এই PIN আগে ফাঁস হয়ে গেছে, অন্য একটি নতুন PIN দিন। / This PIN was exposed — choose a different one.")
+    if is_weak_pin(pin):
+        raise VaultError("এই PIN খুব সহজ বা আগে ফাঁস হয়েছিল, অন্য PIN দিন। / This PIN is too weak or was exposed — choose another.")
     if not re.fullmatch(r"\d{6,12}|.{8,64}", pin or ""):
-        raise VaultError("PIN must be 6-12 digits (or a passphrase of 8+ characters)")
+        raise VaultError("PIN হতে হবে ৬–১২ সংখ্যা, অথবা ৮+ অক্ষরের পাসফ্রেজ। / PIN must be 6–12 digits or an 8+ character passphrase.")
     salt = secrets.token_bytes(16)
     h = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, 200_000)
     store.put("vault/pin", {"s": base64.b64encode(salt).decode(), "h": base64.b64encode(h).decode(), "t": time.time()})
     store.put("vault/lock", {"fails": 0, "until": 0})
+
+
+def clear_pin() -> None:
+    """Remove the web vault PIN (used after a test setup so the owner can set their own)."""
+    store.put("vault/pin", None)
+    store.put("vault/lock", {"fails": 0, "until": 0})
+    store.put("vault/setup_codes", _enc({"codes": []}))
 
 
 def check_pin(pin: str) -> bool:
@@ -156,6 +241,7 @@ def check_pin(pin: str) -> bool:
     rec = store.get("vault/pin", None)
     if not rec:
         raise VaultError("no PIN set yet")
+    pin = normalize_digits(pin)
     ok = hmac.compare_digest(hashlib.pbkdf2_hmac("sha256", (pin or "").encode(), base64.b64decode(rec["s"]), 200_000),
                              base64.b64decode(rec["h"]))
     if ok:

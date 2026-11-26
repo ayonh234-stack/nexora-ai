@@ -88,7 +88,7 @@ _LIMITS: dict[str, list[tuple[int, int]]] = {
     "design": [(8, 60), (100, 86400)],
     "extract": [(10, 60), (100, 86400)],
     "vault": [(6, 60), (40, 86400)],
-    "vcode": [(2, 600), (6, 86400)],
+    "vcode": [(5, 600), (10, 86400)],
 }
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _rl_lock = threading.Lock()
@@ -353,13 +353,13 @@ class ChatIn(BaseModel):
     tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "15"
+APP_VERSION = "16"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
 UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
                  "· *Tap the button to load the new version here.*\n\n"
-                 '<form action="/" method="get"><input type="hidden" name="v" value="15">'
+                 '<form action="/" method="get"><input type="hidden" name="v" value="16">'
                  '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
                  'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
@@ -1113,13 +1113,25 @@ def vault_setup_code(request: Request):
     check_rate(request, "vcode")
     if not (vault.enabled() and TG_TOKEN and ADMIN_CHAT_ID):
         raise HTTPException(503, "vault not configured")
-    code = vault.setup_code()
+    code = vault.issue_setup_code()
     r = tg_api("sendMessage", {"chat_id": int(ADMIN_CHAT_ID), "text":
-               f"🔐 Nexora Vault setup code: {code}\n(10 মিনিট বৈধ / valid 10 minutes)\n\nআপনি নিজে না চাইলে এটা উপেক্ষা করুন। "
-               "If you didn't request this, ignore it."})
-    if not (r and r.get("ok")):
-        raise HTTPException(502, "Telegram send failed")
+               f"🔐 Nexora Vault setup code: {code}\n(১০ মিনিট বৈধ / valid 10 minutes)\n\n"
+               "এটা প্রথম ঘরে দেবেন — আপনার নতুন PIN নয়।\n"
+               "Put this in the first box — not your new PIN.\n\n"
+               "আপনি নিজে না চাইলে এটা উপেক্ষা করুন। If you didn't request this, ignore it."})
+    ok = bool(r and r.get("ok"))
+    mid = (r or {}).get("result", {}).get("message_id") if isinstance(r, dict) else None
+    logger.info("vault setup-code telegram ok=%s message_id=%s", ok, mid)
+    if not ok:
+        raise HTTPException(502, "টেলিগ্রামে কোড পাঠানো যায়নি, একটু পরে আবার চাপুন। / Could not send the code to Telegram — please try again.")
     return {"sent": True}
+
+
+_SETUP_CODE_ERRORS = {
+    "missing": "আগে ‘Telegram-এ কোড পাঠাও’ চাপুন, তারপর টেলিগ্রামে আসা ৬ সংখ্যার কোডটা প্রথম ঘরে দিন — এখানে আপনার PIN নয়। / First tap Send code, then put the 6-digit Telegram code in the first box — not your PIN.",
+    "expired": "সেটআপ কোডের মেয়াদ শেষ (১০ মিনিট)। আবার ‘Telegram-এ কোড পাঠাও’ চাপুন, নতুন কোডটা প্রথম ঘরে দিন। / The setup code expired (10 minutes). Send a new one and use the latest code.",
+    "wrong": "প্রথম ঘরের সেটআপ কোডটি ভুল। টেলিগ্রামে আসা ৬ সংখ্যার কোড দিন — আপনার নতুন PIN নয়। / Wrong setup code. Use the 6-digit code from Telegram, not your new PIN.",
+}
 
 
 @app.post("/api/vault/pin")
@@ -1127,12 +1139,16 @@ def vault_set_pin(body: PinIn, request: Request):
     check_rate(request, "vault")
     if not vault.enabled():
         raise HTTPException(503, "vault not configured")
-    if not vault.check_setup_code(body.code):
-        raise HTTPException(403, "সেটআপ কোড ভুল বা মেয়াদোত্তীর্ণ / Wrong or expired setup code")
+    reason = vault.check_setup_code(body.code)
+    if reason != "ok":
+        logger.info("vault set-pin rejected: %s", reason)
+        raise HTTPException(403, _SETUP_CODE_ERRORS.get(reason, _SETUP_CODE_ERRORS["wrong"]))
     try:
         vault.set_pin(body.pin)
     except vault.VaultError as exc:
+        logger.info("vault set-pin rejected: pin-invalid")
         raise HTTPException(400, str(exc))
+    vault.consume_setup_code(body.code)
     return {"ok": True, "token": vault.issue_owner_token()}
 
 

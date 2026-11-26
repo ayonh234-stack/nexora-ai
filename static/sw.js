@@ -1,7 +1,7 @@
 // Nexora AI service worker: network-first (bypassing the HTTP cache) for the app shell, never caches /api.
-const CACHE = "nexora-v15";
+const CACHE = "nexora-v16";
 const SHELL = [
-  "/", "/index.html", "/style.css?v=15", "/app.js?v=15", "/config.js",
+  "/", "/index.html", "/style.css?v=16", "/app.js?v=16", "/config.js",
   "/vendor/marked.min.js", "/vendor/purify.min.js", "/manifest.webmanifest",
   "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png",
 ];
