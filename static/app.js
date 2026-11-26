@@ -15,7 +15,7 @@
       disclaimer: "Nexora AI ভুল করতে পারে। গুরুত্বপূর্ণ তথ্য যাচাই করে নিন।",
       copy: "কপি", copied: "কপি হয়েছে", regen: "আবার লিখুন", listen: "শুনুন", download: "ডাউনলোড", rename: "নাম বদলান", del: "মুছুন",
       today: "আজ", yesterday: "গতকাল", week: "গত ৭ দিন", older: "আগের", untitled: "নতুন চ্যাট", noHistory: "এখনো কোনো চ্যাট নেই", noMatch: "কিছু পাওয়া যায়নি",
-      confirmClear: "সব চ্যাট মুছে ফেলবেন?", confirmDel: "এই চ্যাটটি মুছবেন?", offline: "আপনি অফলাইনে আছেন", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।",
+      confirmClear: "সব চ্যাট মুছে ফেলবেন?", confirmDel: "এই চ্যাটটি মুছবেন?", offline: "আপনি অফলাইনে আছেন", netErr: "নেটওয়ার্ক সমস্যা, আবার চেষ্টা করুন।", netRetry: "সংযোগ যায়নি, আবার চেষ্টা করছি…",
       imgWait: "ছবি তৈরি করছি…", vidWait: "ভিডিও তৈরি হচ্ছে (২০–৯০ সেকেন্ড)…", editing: "ছবি এডিট করছি…", bgMaking: "নতুন ব্যাকগ্রাউন্ড তৈরি হচ্ছে…",
       busy: "ছবি তৈরি করছি…", altServer: "ছবি তৈরি করছি…",
       allBusy: "দুঃখিত, ফ্রি ছবি-সার্ভারগুলো এখন ব্যস্ত, তাই ছবি তৈরি হয়নি। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।",
@@ -40,7 +40,7 @@
       disclaimer: "Nexora AI can make mistakes. Check important info.",
       copy: "Copy", copied: "Copied", regen: "Regenerate", listen: "Listen", download: "Download", rename: "Rename", del: "Delete",
       today: "Today", yesterday: "Yesterday", week: "Previous 7 days", older: "Older", untitled: "New chat", noHistory: "No chats yet", noMatch: "No matches",
-      confirmClear: "Delete all chats?", confirmDel: "Delete this chat?", offline: "You are offline", netErr: "Network problem, please try again.",
+      confirmClear: "Delete all chats?", confirmDel: "Delete this chat?", offline: "You are offline", netErr: "Network problem, please try again.", netRetry: "Connection dropped, retrying…",
       imgWait: "Creating image…", vidWait: "Creating your video (20–90s)…", editing: "Editing your photo…", bgMaking: "Creating the new background…",
       busy: "Creating image…", altServer: "Creating image…",
       allBusy: "Sorry, the free image servers are busy right now, so no image was created. Please try again in a few seconds.",
@@ -81,6 +81,7 @@
     igFollowers: "ফলোয়ার", igPosts: "পোস্ট", igDays: "টোকেনের মেয়াদ (দিন)", igAutoPost: "অটো পোস্ট (শিডিউলের পোস্ট অনুমোদন ছাড়াই)",
     igAutoReply: "অটো রিপ্লাই (নিরাপদ টেমপ্লেট)", igAutoSpam: "স্প্যাম কমেন্ট নিজে লুকাবে", igDisconnect: "সংযোগ বিচ্ছিন্ন",
     igTip: "চ্যাটে বলুন: “প্রতিদিন রাত ৮টায় পোস্ট দিও”, “নতুন কমেন্ট দেখাও”, “Instagram ইনসাইট দাও”। অনুমোদনের বাটন Telegram-এ আসবে।",
+    vBurned: "এই PIN আগে ফাঁস হয়ে গেছে। নতুন PIN সেট করুন।", vNeedSetup: "আগে Telegram-এ কোড নিয়ে PIN সেট করুন।", vBurnedChange: "ভোল্ট খুলেছে। এই PIN ফাঁস হয়েছিল — এখনই নতুন PIN সেট করুন।",
     vAdd: "নতুন যোগ করুন", vName: "নাম", vValue: "মান (পাসওয়ার্ড / API key)", vNote: "নোট (ঐচ্ছিক)", vLock: "লক", vDone: "ঠিক আছে", vDelQ: "মুছে ফেলবেন",
   });
   Object.assign(T.en, {
@@ -93,6 +94,7 @@
     vSendCode: "Send code to Telegram", vCode: "6-digit code", vNewPin: "New PIN (6–12 digits or an 8+ character passphrase)", vPin2: "Repeat PIN",
     vSave: "Save", vCodeSent: "Code sent — check Telegram", vMismatch: "PINs don't match", vUnlockSub: "Enter your PIN to open the vault.", vForgot: "Forgot PIN / first-time setup?",
     vUnlock: "Unlock", vLocked: "Vault locked — enter PIN again", vEmpty: "Nothing stored yet", vInfo: "Everything is encrypted. Nexora uses entries for tasks but never shows the values.",
+    vBurned: "This PIN was exposed earlier. Please set a new PIN.", vNeedSetup: "Set a PIN first using the code sent to Telegram.", vBurnedChange: "Vault unlocked. This PIN was exposed — set a new PIN now.",
     igSub: "Connects through the official Instagram API, no password needed. The token is stored encrypted in your vault.", igGuide: "Step-by-step guide (Bengali)",
     igToken: "Access token", igMore: "Optional: User ID / App ID / App Secret (Facebook Login)", igConnect: "Connect", igConnected: "connected",
     igFollowers: "Followers", igPosts: "Posts", igDays: "Token valid (days)", igAutoPost: "Auto-post (scheduled posts without approval)",
@@ -156,7 +158,24 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "14";
+  const CLIENT_VERSION = "15";
+  const BURNED_PIN = "521901";
+  function isNetFail(e) {
+    const name = (e && e.name) || "";
+    const m = String((e && e.message) || e || "");
+    return name === "TypeError" || name === "AbortError" || /load failed|failed to fetch|networkerror|network error|fetch failed|internet connection appears to be offline/i.test(m);
+  }
+  function friendlyNet(e) { return isNetFail(e) ? t("netErr") : ((e && e.message) || t("netErr")); }
+  function vaultIntent(text) {
+    const s = (text || "").trim();
+    const pin = s.match(/^(?:\/)?(?:vault|ভোল্ট)\s+(?:pin|পিন)\s+(.+)$/i);
+    if (pin) return { kind: "pin", pin: pin[1].trim() };
+    if (/^(?:\/)?vault(?:\s+(?:খোলো|খুলুন|খুলো|open|please|pls))?$/i.test(s)) return { kind: "open" };
+    if (/^(?:open\s+(?:the\s+)?)?vault$/i.test(s)) return { kind: "open" };
+    if (/^(?:\/)?ভোল্ট(?:\s*(?:খোলো|খুলুন|খুলো))?$/i.test(s)) return { kind: "open" };
+    if (/^open\s+vault$/i.test(s)) return { kind: "open" };
+    return null;
+  }
   async function api(path, opts) {
     opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, agentHeaders(), opts.headers || {});
     return fetch(API + path, opts);
@@ -346,51 +365,85 @@
     })).filter((m) => m.content.trim());
   }
 
+  function dropPendingTurn(bot) {
+    const c = chat();
+    const i = c.messages.indexOf(bot.m);
+    if (bot.el && bot.el.remove) bot.el.remove();
+    if (i >= 0) c.messages.splice(i, 1);
+    const prev = c.messages[c.messages.length - 1];
+    if (prev && prev.role === "user" && vaultIntent(prev.content)) {
+      c.messages.pop();
+      const rows = els.thread.querySelectorAll(".msg.user");
+      const last = rows[rows.length - 1]; if (last) last.remove();
+    }
+    save(); renderHistory();
+    if (!c.messages.length) renderThread();
+  }
+  function handleVaultAction(action, bot) {
+    if (action !== "vault" && action !== "vault_pin") return false;
+    const prev = (() => { const c = chat(); const i = c.messages.indexOf(bot.m); return i > 0 ? c.messages[i - 1] : null; })();
+    const intent = prev && prev.role === "user" ? vaultIntent(prev.content) : { kind: "open" };
+    dropPendingTurn(bot);
+    handleVaultIntent(intent || { kind: "open" });
+    return true;
+  }
   async function sendChat(text, bot, docs) {
     const c = chat(); const idx = c.messages.indexOf(bot.m);
     if (!docs) { const um = c.messages[idx - 1]; if (um && um.docs && um.docs.length && um.docs[0].text) docs = um.docs; }
     bot.m.regen = { kind: "chat", text };
-    try {
-      const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true,
-          attachments: (docs || []).map((d) => ({ name: d.name, text: d.text || "" })) }) });
-      if (!res.ok) throw new Error(await errText(res));
-      const ct = res.headers.get("content-type") || "";
-      if (ct.includes("application/json")) {
-        const j = await res.json();
-        if (j.action) return mediaAction(j.action, j.prompt, bot);
-        Object.assign(bot.m, { content: j.reply || "", pending: false }); refresh(bot); return;
-      }
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", acc = "", lastPaint = 0, action = null;
-      const md_ = () => bot.el.querySelector(".md");
-      for (;;) {
-        const { value, done } = await reader.read(); if (done) break;
-        buf += dec.decode(value, { stream: true }); let i;
-        while ((i = buf.indexOf("\n\n")) >= 0) {
-          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
-          if (!line.startsWith("data:")) continue;
-          const ev = JSON.parse(line.slice(5));
-          if (ev.delta) acc += ev.delta;
-          if (ev.action) action = ev;
-          if (ev.error) { bot.m.error = !acc; acc = acc ? acc + "\n\n" + ev.error : ev.error; }
-          if (ev.tool) { (bot.m.steps = bot.m.steps || []).push(ev.tool.label); if (!acc) refresh(bot); }
-          if (ev.file) { (bot.m.files = bot.m.files || []).push(ev.file); }
-          if (ev.link) { (bot.m.links = bot.m.links || []).push(ev.link); }
-          if (ev.tg_link) { localStorage.setItem(LS_TG, ev.tg_link); toast(t("tgLinked")); }
+    let retried = false;
+    for (;;) {
+      try {
+        const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, mode: "auto", session_id: sid + ":" + current, history: historyPayload(idx - 1), stream: true,
+            attachments: (docs || []).map((d) => ({ name: d.name, text: d.text || "" })) }) });
+        if (!res.ok) throw new Error(await errText(res));
+        const ct = res.headers.get("content-type") || "";
+        if (ct.includes("application/json")) {
+          const j = await res.json();
+          if (handleVaultAction(j.action, bot)) return;
+          if (j.action) return mediaAction(j.action, j.prompt, bot);
+          Object.assign(bot.m, { content: j.reply || "", pending: false, error: false }); refresh(bot); return;
         }
-        if (acc && !action) {
-          Object.assign(bot.m, { content: acc, pending: false, streaming: true });
-          const now = performance.now();
-          if (!md_()) fillBody(bot.el.querySelector(".body"), bot.m);
-          else if (now - lastPaint > 50) { const d = md_(); d.innerHTML = md(acc); lastPaint = now; scrollEnd(); }
+        const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", acc = "", lastPaint = 0, action = null;
+        const md_ = () => bot.el.querySelector(".md");
+        for (;;) {
+          const { value, done } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true }); let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+            if (!line.startsWith("data:")) continue;
+            const ev = JSON.parse(line.slice(5));
+            if (ev.delta) acc += ev.delta;
+            if (ev.action) action = ev;
+            if (ev.error) { bot.m.error = !acc; acc = acc ? acc + "\n\n" + ev.error : ev.error; }
+            if (ev.tool) { (bot.m.steps = bot.m.steps || []).push(ev.tool.label); if (!acc) refresh(bot); }
+            if (ev.file) { (bot.m.files = bot.m.files || []).push(ev.file); }
+            if (ev.link) { (bot.m.links = bot.m.links || []).push(ev.link); }
+            if (ev.tg_link) { localStorage.setItem(LS_TG, ev.tg_link); toast(t("tgLinked")); }
+          }
+          if (acc && !action) {
+            Object.assign(bot.m, { content: acc, pending: false, streaming: true });
+            const now = performance.now();
+            if (!md_()) fillBody(bot.el.querySelector(".body"), bot.m);
+            else if (now - lastPaint > 50) { const d = md_(); d.innerHTML = md(acc); lastPaint = now; scrollEnd(); }
+          }
         }
+        if (action) {
+          if (handleVaultAction(action.action, bot)) return;
+          if (acc.trim()) { Object.assign(bot.m, { content: acc, pending: false, streaming: false, regen: null }); refresh(bot); bot = push({ role: "assistant", content: "", pending: true }); }
+          return mediaAction(action.action, action.prompt, bot);
+        }
+        Object.assign(bot.m, { content: acc || ((bot.m.files || []).length ? "" : t("netErr")), pending: false, streaming: false }); refresh(bot); return;
+      } catch (e) {
+        if (!retried && isNetFail(e) && !((bot.m.content || "").trim())) {
+          retried = true; toast(t("netRetry")); await sleep(700);
+          Object.assign(bot.m, { pending: true, error: false, content: "", streaming: false }); refresh(bot);
+          continue;
+        }
+        Object.assign(bot.m, { pending: false, streaming: false, error: true, content: friendlyNet(e) }); refresh(bot); return;
       }
-      if (action) {
-        if (acc.trim()) { Object.assign(bot.m, { content: acc, pending: false, streaming: false, regen: null }); refresh(bot); bot = push({ role: "assistant", content: "", pending: true }); }
-        return mediaAction(action.action, action.prompt, bot);
-      }
-      Object.assign(bot.m, { content: acc || ((bot.m.files || []).length ? "" : t("netErr")), pending: false, streaming: false }); refresh(bot);
-    } catch (e) { Object.assign(bot.m, { pending: false, streaming: false, error: true, content: e.message || t("netErr") }); refresh(bot); }
+    }
   }
   function mediaAction(kind, prompt, bot) {
     Object.assign(bot.m, { pending: true, content: "", progress: kind === "image" ? t("imgWait") : t("vidWait") }); refresh(bot);
@@ -602,7 +655,8 @@
         const bot = push({ role: "assistant", content: "", pending: true });
         await sendChat(q, bot, docs);
       } else {
-        if (/^\/vault\b/i.test(text)) { openVault(); return; }
+        const vIntent = vaultIntent(text);
+        if (vIntent) { await handleVaultIntent(vIntent); return; }
         if (/^\/(instagram|ig)\b/i.test(text)) { openInstagram(); return; }
         push({ role: "user", content: text });
         const bot = push({ role: "assistant", content: "", pending: true });
@@ -672,7 +726,7 @@
       }
     } catch (e) {
       if (user.m.content === "🎤 …") { user.m.content = "🎤"; refresh(user); }
-      Object.assign(bot.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); refresh(bot);
+      Object.assign(bot.m, { pending: false, error: true, content: friendlyNet(e), progress: "" }); refresh(bot);
     } finally { busy = false; setBusy(false); save(); }
   }
   async function speak(m, body, btn) {
@@ -881,12 +935,36 @@
     };
   }
 
-  // --- Owner vault (hidden from regular users; open with #vault or by typing /vault)
+  // --- Owner vault (sidebar button, or type "vault" / "ভোল্ট" / "vault pin 123456")
   async function vaultCall(path, body) {
-    const r = await api(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let r;
+    try { r = await api(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+    catch (e) { throw new Error(friendlyNet(e)); }
     if (r.status === 401) { localStorage.removeItem(LS_OWNER); throw new Error(t("vLocked")); }
     if (!r.ok) throw new Error(await errText(r));
     return r.json();
+  }
+  async function handleVaultIntent(intent) {
+    if (!intent) return openVault();
+    if (intent.kind !== "pin") return openVault();
+    const pin = (intent.pin || "").trim();
+    if (!pin) return openVault();
+    let st = { has_pin: true, unlocked: false, enabled: true };
+    try { st = await vaultCall("/api/vault/status"); } catch (e) { toast(e.message || t("netErr")); return; }
+    if (!st.enabled) { toast(t("vOff")); return; }
+    if (st.unlocked) return vaultUnlocked();
+    if (!st.has_pin) {
+      if (pin === BURNED_PIN) toast(t("vBurned"));
+      else toast(t("vNeedSetup"));
+      return openVault("setup");
+    }
+    try {
+      const j = await vaultCall("/api/vault/unlock", { pin });
+      localStorage.setItem(LS_OWNER, j.token);
+      $("#vaultBtn").hidden = false; $("#igBtn").hidden = false;
+      if (pin === BURNED_PIN) toast(t("vBurnedChange"));
+      return vaultUnlocked();
+    } catch (e) { toast(e.message || t("netErr")); return openVault(); }
   }
   async function openVault(view) {
     closeSide();
@@ -904,6 +982,7 @@
       d.querySelector("#vSend").onclick = async (e) => { e.target.disabled = true; try { await vaultCall("/api/vault/setup-code", {}); toast(t("vCodeSent")); } catch (er) { toast(er.message); e.target.disabled = false; } };
       d.querySelector("#vSet").onclick = async () => {
         const pin = d.querySelector("#vPin").value; if (pin !== d.querySelector("#vPin2").value) { toast(t("vMismatch")); return; }
+        if (pin === BURNED_PIN) { toast(t("vBurned")); return; }
         try { const j = await vaultCall("/api/vault/pin", { code: d.querySelector("#vCode").value.trim(), pin }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; vaultUnlocked(); }
         catch (er) { toast(er.message); }
       };
@@ -967,10 +1046,10 @@
     d.querySelector("#igOff").onclick = async () => { if (!confirm(t("igDisconnect") + "?")) return; try { await vaultCall("/api/ig/disconnect", {}); d.close(); toast("✓"); } catch (e) { toast(e.message); } };
   }
   const sideFoot = document.querySelector(".side-foot");
-  sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn" hidden>🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button><button class="side-link" id="igBtn" hidden>📸 <span>Instagram</span></button>`);
+  sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn">🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button><button class="side-link" id="igBtn" hidden>📸 <span>Instagram</span></button>`);
   $("#igBtn").onclick = () => openInstagram();
   $("#tgBtn").onclick = openLink; $("#vaultBtn").onclick = () => openVault();
-  if (ownerToken()) { $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; }
+  if (ownerToken()) { $("#igBtn").hidden = false; }
   if (/^#vault/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(() => openVault(), 300); }
   if (/^#link/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(openLink, 300); }
 

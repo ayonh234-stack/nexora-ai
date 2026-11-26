@@ -353,13 +353,13 @@ class ChatIn(BaseModel):
     tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "14"
+APP_VERSION = "15"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
 UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
                  "· *Tap the button to load the new version here.*\n\n"
-                 '<form action="/" method="get"><input type="hidden" name="v" value="14">'
+                 '<form action="/" method="get"><input type="hidden" name="v" value="15">'
                  '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
                  'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
@@ -469,6 +469,8 @@ def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: 
     forced = agent.forced_tool(text, tools_all)
 
     def gen():
+        # Safari/iOS fetch throws TypeError "Load failed" if the SSE stays silent during model fallback (429/timeout).
+        yield ": ping\n\n"
         if forced:  # the user clearly asked for a tool: go straight to the agent (no "done!" without doing it)
             yield from run_agent()
             yield ev({"done": True, "model": "agent"})
@@ -537,12 +539,30 @@ def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: 
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+
+def vault_chat_intent(text: str) -> dict | None:
+    """Owner vault phrases must never go to the LLM (and a PIN in chat must never be stored/echoed)."""
+    raw = (text or "").strip()
+    if re.match(r"^(?:/)?(?:vault|ভোল্ট)\s+(?:pin|পিন)\s+\S", raw, flags=re.I):
+        return {"action": "vault_pin"}
+    if re.match(r"^(?:/)?vault(?:\s+(?:খোলো|খুলুন|খুলো|open|please|pls))?$", raw, flags=re.I):
+        return {"action": "vault"}
+    if re.match(r"^(?:open\s+(?:the\s+)?)?vault$", raw, flags=re.I):
+        return {"action": "vault"}
+    if re.match(r"^(?:/)?ভোল্ট(?:\s*(?:খোলো|খুলুন|খুলো))?$", raw):
+        return {"action": "vault"}
+    return None
+
+
 @app.post("/api/chat")
 async def chat(body: ChatIn, request: Request):
     check_rate(request, "chat")
     text = body.message.strip()
     if not text:
         raise HTTPException(400, "empty message")
+    intent = vault_chat_intent(text)
+    if intent:
+        return JSONResponse(intent)
     mode = body.mode if body.mode in MODES else "auto"
     docs = [a for a in (body.attachments or []) if isinstance(a, dict) and a.get("text")][:3]
 

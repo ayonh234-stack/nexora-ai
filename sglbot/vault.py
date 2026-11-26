@@ -135,7 +135,12 @@ def check_setup_code(code: str) -> bool:
     return any(hmac.compare_digest((code or "").strip(), setup_code(x)) for x in (w, w - 1))
 
 
+BURNED_PINS = frozenset({"521901"})
+
+
 def set_pin(pin: str) -> None:
+    if (pin or "").strip() in BURNED_PINS:
+        raise VaultError("this PIN was exposed — please choose a different one")
     if not re.fullmatch(r"\d{6,12}|.{8,64}", pin or ""):
         raise VaultError("PIN must be 6-12 digits (or a passphrase of 8+ characters)")
     salt = secrets.token_bytes(16)

@@ -16,6 +16,29 @@ _cache: dict[str, tuple[float, object]] = {}
 PREFIX = "nexora/"
 
 
+BLOB_TIMEOUT = float(os.getenv("BLOB_TIMEOUT") or 25)
+
+
+def _bounded(fn, *a, **kw):
+    """Run a blob SDK call with a hard deadline (its downloads have no read timeout, so a dead connection could hang)."""
+    box: dict = {}
+
+    def run():
+        try:
+            box["v"] = fn(*a, **kw)
+        except BaseException as exc:  # re-raised in the caller's thread
+            box["e"] = exc
+
+    t = threading.Thread(target=run, daemon=True, name="blob-call")
+    t.start()
+    t.join(BLOB_TIMEOUT)
+    if t.is_alive():
+        raise TimeoutError(f"blob call timed out after {BLOB_TIMEOUT:.0f}s")
+    if "e" in box:
+        raise box["e"]
+    return box.get("v")
+
+
 def _blob_on() -> bool:
     return bool(os.getenv("BLOB_READ_WRITE_TOKEN"))
 
@@ -39,7 +62,7 @@ def get(key: str, default=None, max_age: float = 0):
             from vercel.blob import sync as blob
 
             try:
-                res = blob.get_blob(_url(PREFIX + key + ".json"), access="private")
+                res = _bounded(blob.get_blob, _url(PREFIX + key + ".json"), access="private")
                 body = getattr(res, "body", None)
                 if body is None and hasattr(res, "read"):
                     body = res.read()
@@ -64,7 +87,7 @@ def put(key: str, value) -> None:
         if _blob_on():
             from vercel.blob import sync as blob
 
-            blob.put_blob(PREFIX + key + ".json", data, access="private", content_type="application/json",
+            _bounded(blob.put_blob, PREFIX + key + ".json", data, access="private", content_type="application/json",
                           allow_overwrite=True, cache_control_max_age=60)
         else:
             os.makedirs(_LOCAL, exist_ok=True)
@@ -82,7 +105,7 @@ def put_bytes(key: str, data: bytes, content_type: str = "application/octet-stre
     if _blob_on():
         from vercel.blob import sync as blob
 
-        blob.put_blob(PREFIX + key, data, access="private", content_type=content_type, allow_overwrite=True,
+        _bounded(blob.put_blob, PREFIX + key, data, access="private", content_type=content_type, allow_overwrite=True,
                       cache_control_max_age=3600)
     else:
         os.makedirs(_LOCAL, exist_ok=True)
@@ -95,7 +118,7 @@ def get_bytes(key: str) -> bytes | None:
         from vercel.blob import sync as blob
 
         try:
-            res = blob.get_blob(_url(PREFIX + key), access="private")
+            res = _bounded(blob.get_blob, _url(PREFIX + key), access="private")
         except blob.BlobNotFoundError:
             return None
         body = getattr(res, "body", None)
