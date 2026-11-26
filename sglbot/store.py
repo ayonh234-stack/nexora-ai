@@ -75,3 +75,32 @@ def put(key: str, value) -> None:
             os.replace(tmp, p)
             os.chmod(p, 0o600)
     _cache[key] = (time.time(), value)
+
+
+def put_bytes(key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+    """Binary object (e.g. an image waiting to be published to Instagram)."""
+    if _blob_on():
+        from vercel.blob import sync as blob
+
+        blob.put_blob(PREFIX + key, data, access="private", content_type=content_type, allow_overwrite=True,
+                      cache_control_max_age=3600)
+    else:
+        os.makedirs(_LOCAL, exist_ok=True)
+        with open(os.path.join(_LOCAL, key.replace("/", "__")), "wb") as fh:
+            fh.write(data)
+
+
+def get_bytes(key: str) -> bytes | None:
+    if _blob_on():
+        from vercel.blob import sync as blob
+
+        try:
+            res = blob.get_blob(_url(PREFIX + key), access="private")
+        except blob.BlobNotFoundError:
+            return None
+        body = getattr(res, "body", None)
+        if body is None and hasattr(res, "read"):
+            body = res.read()
+        return bytes(body)
+    p = os.path.join(_LOCAL, key.replace("/", "__"))
+    return open(p, "rb").read() if os.path.exists(p) else None

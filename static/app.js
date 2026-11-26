@@ -76,6 +76,11 @@
     vSendCode: "Telegram-এ কোড পাঠাও", vCode: "৬ সংখ্যার কোড", vNewPin: "নতুন PIN (৬–১২ সংখ্যা বা ৮+ অক্ষরের পাসফ্রেজ)", vPin2: "PIN আবার লিখুন",
     vSave: "সেভ", vCodeSent: "কোড পাঠানো হয়েছে — Telegram দেখুন", vMismatch: "দুটো PIN মেলেনি", vUnlockSub: "ভল্ট খুলতে PIN দিন।", vForgot: "PIN ভুলে গেছেন / প্রথমবার সেট করবেন?",
     vUnlock: "খুলুন", vLocked: "ভল্ট লক — আবার PIN দিন", vEmpty: "এখনও কিছু রাখা হয়নি", vInfo: "সব কিছু এনক্রিপ্ট করে রাখা। Nexora কাজের সময় ব্যবহার করবে, কিন্তু কখনও মান দেখাবে না।",
+    igSub: "অফিশিয়াল Instagram API দিয়ে যুক্ত হবে, পাসওয়ার্ড লাগবে না। টোকেন এনক্রিপ্ট করে ভল্টে থাকবে।", igGuide: "ধাপে ধাপে বাংলা গাইড",
+    igToken: "Access token", igMore: "ঐচ্ছিক: User ID / App ID / App Secret (Facebook Login হলে)", igConnect: "যুক্ত করুন", igConnected: "যুক্ত আছে",
+    igFollowers: "ফলোয়ার", igPosts: "পোস্ট", igDays: "টোকেনের মেয়াদ (দিন)", igAutoPost: "অটো পোস্ট (শিডিউলের পোস্ট অনুমোদন ছাড়াই)",
+    igAutoReply: "অটো রিপ্লাই (নিরাপদ টেমপ্লেট)", igAutoSpam: "স্প্যাম কমেন্ট নিজে লুকাবে", igDisconnect: "সংযোগ বিচ্ছিন্ন",
+    igTip: "চ্যাটে বলুন: “প্রতিদিন রাত ৮টায় পোস্ট দিও”, “নতুন কমেন্ট দেখাও”, “Instagram ইনসাইট দাও”। অনুমোদনের বাটন Telegram-এ আসবে।",
     vAdd: "নতুন যোগ করুন", vName: "নাম", vValue: "মান (পাসওয়ার্ড / API key)", vNote: "নোট (ঐচ্ছিক)", vLock: "লক", vDone: "ঠিক আছে", vDelQ: "মুছে ফেলবেন",
   });
   Object.assign(T.en, {
@@ -88,6 +93,11 @@
     vSendCode: "Send code to Telegram", vCode: "6-digit code", vNewPin: "New PIN (6–12 digits or an 8+ character passphrase)", vPin2: "Repeat PIN",
     vSave: "Save", vCodeSent: "Code sent — check Telegram", vMismatch: "PINs don't match", vUnlockSub: "Enter your PIN to open the vault.", vForgot: "Forgot PIN / first-time setup?",
     vUnlock: "Unlock", vLocked: "Vault locked — enter PIN again", vEmpty: "Nothing stored yet", vInfo: "Everything is encrypted. Nexora uses entries for tasks but never shows the values.",
+    igSub: "Connects through the official Instagram API, no password needed. The token is stored encrypted in your vault.", igGuide: "Step-by-step guide (Bengali)",
+    igToken: "Access token", igMore: "Optional: User ID / App ID / App Secret (Facebook Login)", igConnect: "Connect", igConnected: "connected",
+    igFollowers: "Followers", igPosts: "Posts", igDays: "Token valid (days)", igAutoPost: "Auto-post (scheduled posts without approval)",
+    igAutoReply: "Auto-reply (safe templates)", igAutoSpam: "Auto-hide spam comments", igDisconnect: "Disconnect",
+    igTip: "Ask in chat: “post daily at 8pm”, “show new comments”, “Instagram insights”. Approval buttons arrive in Telegram.",
     vAdd: "Add new", vName: "Name", vValue: "Value (password / API key)", vNote: "Note (optional)", vLock: "Lock", vDone: "Done", vDelQ: "Delete",
   });
   let lang = localStorage.getItem(LS_LANG) || "bn";
@@ -146,7 +156,7 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "13";
+  const CLIENT_VERSION = "14";
   async function api(path, opts) {
     opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, agentHeaders(), opts.headers || {});
     return fetch(API + path, opts);
@@ -593,6 +603,7 @@
         await sendChat(q, bot, docs);
       } else {
         if (/^\/vault\b/i.test(text)) { openVault(); return; }
+        if (/^\/(instagram|ig)\b/i.test(text)) { openInstagram(); return; }
         push({ role: "user", content: text });
         const bot = push({ role: "assistant", content: "", pending: true });
         await sendChat(text, bot);
@@ -893,7 +904,7 @@
       d.querySelector("#vSend").onclick = async (e) => { e.target.disabled = true; try { await vaultCall("/api/vault/setup-code", {}); toast(t("vCodeSent")); } catch (er) { toast(er.message); e.target.disabled = false; } };
       d.querySelector("#vSet").onclick = async () => {
         const pin = d.querySelector("#vPin").value; if (pin !== d.querySelector("#vPin2").value) { toast(t("vMismatch")); return; }
-        try { const j = await vaultCall("/api/vault/pin", { code: d.querySelector("#vCode").value.trim(), pin }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; vaultUnlocked(); }
+        try { const j = await vaultCall("/api/vault/pin", { code: d.querySelector("#vCode").value.trim(), pin }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; vaultUnlocked(); }
         catch (er) { toast(er.message); }
       };
       return;
@@ -903,7 +914,7 @@
       <p class="mini"><a href="#" id="vForgot">${esc(t("vForgot"))}</a></p>
       <div class="sheet-actions"><button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="vUnlock">${esc(t("vUnlock"))}</button></div>`);
     d.querySelector("#vForgot").onclick = (e) => { e.preventDefault(); openVault("setup"); };
-    const go = async () => { try { const j = await vaultCall("/api/vault/unlock", { pin: d.querySelector("#vPin").value }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; vaultUnlocked(); } catch (er) { toast(er.message); } };
+    const go = async () => { try { const j = await vaultCall("/api/vault/unlock", { pin: d.querySelector("#vPin").value }); localStorage.setItem(LS_OWNER, j.token); $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; vaultUnlocked(); } catch (er) { toast(er.message); } };
     d.querySelector("#vUnlock").onclick = go; d.querySelector("#vPin").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
   }
   async function vaultUnlocked(entries) {
@@ -923,10 +934,43 @@
     };
     d.querySelector("#vLock").onclick = () => { localStorage.removeItem(LS_OWNER); d.close(); toast("🔒"); };
   }
+  // --- Instagram (owner only, official Graph API)
+  async function openInstagram() {
+    closeSide();
+    if (!ownerToken()) { toast(t("vLocked")); return openVault(); }
+    let st;
+    try { st = await vaultCall("/api/ig/status"); } catch (e) { toast(e.message); return; }
+    const guide = `<a href="/help/instagram" target="_blank" rel="noopener">📘 ${esc(t("igGuide"))}</a>`;
+    if (!st.connected) {
+      const d = sheet(`<h2>📸 Instagram</h2><p class="muted">${esc(t("igSub"))}</p><p class="mini">${guide}</p>
+        <label>${esc(t("igToken"))}<input id="igTok" type="password" autocomplete="off" placeholder="IG... / EAA..." /></label>
+        <details class="vault-add"><summary>${esc(t("igMore"))}</summary>
+        <label>Instagram user id<input id="igUid" inputmode="numeric" autocomplete="off" /></label>
+        <label>App ID<input id="igApp" inputmode="numeric" autocomplete="off" /></label>
+        <label>App Secret<input id="igSec" type="password" autocomplete="off" /></label></details>
+        <div class="sheet-actions"><button type="button" class="ghost-btn" data-close>${esc(t("cancel"))}</button><button type="button" class="primary-btn" id="igGo">${esc(t("igConnect"))}</button></div>`);
+      d.querySelector("#igGo").onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = "…";
+        try { await vaultCall("/api/ig/connect", { token: d.querySelector("#igTok").value.trim(), user_id: d.querySelector("#igUid").value.trim(), app_id: d.querySelector("#igApp").value.trim(), app_secret: d.querySelector("#igSec").value.trim() }); toast("✅ Instagram"); openInstagram(); }
+        catch (er) { toast(er.message); e.target.disabled = false; e.target.textContent = t("igConnect"); }
+      };
+      return;
+    }
+    const s_ = st.settings || {};
+    const tg = (k, label) => `<label class="tog"><input type="checkbox" data-k="${k}" ${s_[k] ? "checked" : ""}/> <span>${esc(label)}</span></label>`;
+    const d = sheet(`<h2>📸 Instagram</h2><p class="ok-line">✅ @${esc(st.username || "")} ${esc(t("igConnected"))}</p>
+      <p class="muted">${st.followers != null ? esc(t("igFollowers")) + ": <b>" + esc(st.followers) + "</b> · " : ""}${st.media_count != null ? esc(t("igPosts")) + ": <b>" + esc(st.media_count) + "</b>" : ""}${st.token_days_left != null ? "<br>" + esc(t("igDays")) + ": " + esc(st.token_days_left) : ""}</p>
+      ${tg("auto_post", t("igAutoPost"))}${tg("auto_reply", t("igAutoReply"))}${tg("auto_hide_spam", t("igAutoSpam"))}
+      <p class="mini">${esc(t("igTip"))}</p><p class="mini">${guide}</p>
+      <div class="sheet-actions"><button type="button" class="ghost-btn" id="igOff">${esc(t("igDisconnect"))}</button><button type="button" class="primary-btn" data-close>${esc(t("vDone"))}</button></div>`);
+    d.querySelectorAll("input[data-k]").forEach((c) => { c.onchange = async () => { try { await vaultCall("/api/ig/settings", { [c.dataset.k]: c.checked }); toast("✓"); } catch (e) { toast(e.message); c.checked = !c.checked; } }; });
+    d.querySelector("#igOff").onclick = async () => { if (!confirm(t("igDisconnect") + "?")) return; try { await vaultCall("/api/ig/disconnect", {}); d.close(); toast("✓"); } catch (e) { toast(e.message); } };
+  }
   const sideFoot = document.querySelector(".side-foot");
-  sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn" hidden>🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button>`);
+  sideFoot.insertAdjacentHTML("afterbegin", `<button class="side-link" id="tgBtn">📲 <span data-i18n="tgBtn">${esc(t("tgBtn"))}</span></button><button class="side-link" id="vaultBtn" hidden>🔐 <span data-i18n="vTitle">${esc(t("vTitle"))}</span></button><button class="side-link" id="igBtn" hidden>📸 <span>Instagram</span></button>`);
+  $("#igBtn").onclick = () => openInstagram();
   $("#tgBtn").onclick = openLink; $("#vaultBtn").onclick = () => openVault();
-  if (ownerToken()) $("#vaultBtn").hidden = false;
+  if (ownerToken()) { $("#vaultBtn").hidden = false; $("#igBtn").hidden = false; }
   if (/^#vault/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(() => openVault(), 300); }
   if (/^#link/.test(location.hash)) { history.replaceState(null, "", location.pathname); setTimeout(openLink, 300); }
 

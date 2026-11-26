@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
-from sglbot import ai, files, leadfinder, store, vault, websearch
+from sglbot import ai, files, instagram as ig, leadfinder, store, vault, websearch
 
 logger = logging.getLogger(__name__)
 BOT_USERNAME = "SocialGrowthLabAI_bot"
@@ -74,9 +74,38 @@ T_HTTP = _fn("http_request",
              {"method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]}, "url": {"type": "string"},
               "headers": {"type": "object", "additionalProperties": {"type": "string"}}, "body": {"type": "string"}}, ["method", "url"])
 
+T_IG_ACCOUNT = _fn("ig_account", "OWNER ONLY. Instagram (@socialgrowthlabhq) connection status, followers, today's insights and recent "
+                   "posts with likes/comments; pass media_id for one post's insights.", {"media_id": {"type": "string"}})
+T_IG_POST = _fn("ig_post",
+                "OWNER ONLY. Post to the owner's Instagram via the official API. Either (a) give theme (+ optional caption) and Nexora "
+                "creates the image+caption and sends a preview to the owner's Telegram with Approve/Regenerate/Skip buttons (default, safest), "
+                "or (b) give public image_urls (1 = photo, 2-10 = carousel) or video_url (reel) plus caption to publish directly — "
+                "(b) returns CONFIRMATION_REQUIRED first: show the caption and ask for a yes in the next message.",
+                {"theme": {"type": "string"}, "caption": {"type": "string"},
+                 "image_urls": {"type": "array", "items": {"type": "string"}}, "video_url": {"type": "string"}})
+T_IG_SCHEDULE = _fn("ig_schedule", "OWNER ONLY. Regular Instagram posting: add a daily schedule (time HH:MM local, theme, mode approve = "
+                    "Telegram approval before each post (default) or auto), list schedules, or cancel one by id.",
+                    {"action": {"type": "string", "enum": ["add", "list", "cancel"]}, "time": {"type": "string"},
+                     "theme": {"type": "string"}, "mode": {"type": "string", "enum": ["approve", "auto"]},
+                     "days": {"type": "string", "enum": ["daily", "weekdays"]}, "id": {"type": "string"}}, ["action"])
+T_IG_COMMENTS = _fn("ig_comments", "OWNER ONLY. Read recent comments on the owner's own Instagram posts (ids, text, lead/spam label) "
+                    "and recent DMs if permitted.", {"posts": {"type": "integer", "description": "how many recent posts (max 10)"},
+                                                     "dms": {"type": "boolean"}})
+T_IG_REPLY = _fn("ig_reply", "OWNER ONLY. Reply to a comment on the owner's post (needs the owner's yes first: returns "
+                 "CONFIRMATION_REQUIRED). Never comment on other accounts.",
+                 {"comment_id": {"type": "string"}, "text": {"type": "string"}}, ["comment_id", "text"])
+T_IG_HIDE = _fn("ig_hide", "OWNER ONLY. Hide (or unhide) a spam comment on the owner's post.",
+                {"comment_id": {"type": "string"}, "hide": {"type": "boolean"}}, ["comment_id"])
+T_IG_LEADS = _fn("ig_leads", "OWNER ONLY. Instagram leads collected from comments/DMs showing interest in the service.", {})
+T_IG_SETTINGS = _fn("ig_settings", "OWNER ONLY. Turn Instagram automation modes on/off: auto_post (scheduled posts publish without "
+                    "approval), auto_reply (safe template replies to comments), auto_hide_spam.",
+                    {"auto_post": {"type": "boolean"}, "auto_reply": {"type": "boolean"}, "auto_hide_spam": {"type": "boolean"}})
+IG_TOOLS = [T_IG_ACCOUNT, T_IG_POST, T_IG_SCHEDULE, T_IG_COMMENTS, T_IG_REPLY, T_IG_HIDE, T_IG_LEADS, T_IG_SETTINGS]
+OWNER_ONLY = {"vault_list", "vault_save", "vault_delete", "http_request"} | {t["function"]["name"] for t in IG_TOOLS}
+
 PUBLIC_TOOLS = [T_SEARCH, T_READ, T_LEADS, T_FILE, T_REMIND, T_LIST_REM, T_CANCEL_REM]
 OWNER_TOOLS = [T_VLIST, T_VSAVE, T_VDEL, T_HTTP]
-AGENT_TOOL_NAMES = {t["function"]["name"] for t in PUBLIC_TOOLS + OWNER_TOOLS + [T_LINK]}
+AGENT_TOOL_NAMES = {t["function"]["name"] for t in PUBLIC_TOOLS + OWNER_TOOLS + IG_TOOLS + [T_LINK]}
 
 LABELS = {
     "web_search": ("🔎 খুঁজছি", "🔎 Searching"), "read_url": ("📖 পড়ছি", "📖 Reading"),
@@ -85,6 +114,10 @@ LABELS = {
     "cancel_reminder": ("⏰ বাতিল করছি", "⏰ Cancelling"), "link_telegram": ("📲 Telegram লিংক করছি", "📲 Linking Telegram"),
     "vault_list": ("🔐 ভল্ট দেখছি", "🔐 Checking vault"), "vault_save": ("🔐 ভল্টে রাখছি", "🔐 Saving to vault"),
     "vault_delete": ("🔐 ভল্ট থেকে মুছছি", "🔐 Deleting from vault"), "http_request": ("🌐 API কল করছি", "🌐 Calling API"),
+    "ig_account": ("📊 Instagram দেখছি", "📊 Checking Instagram"), "ig_post": ("📸 Instagram পোস্ট তৈরি করছি", "📸 Preparing Instagram post"),
+    "ig_schedule": ("🗓️ পোস্ট শিডিউল", "🗓️ Post schedule"), "ig_comments": ("💬 কমেন্ট পড়ছি", "💬 Reading comments"),
+    "ig_reply": ("💬 রিপ্লাই দিচ্ছি", "💬 Replying"), "ig_hide": ("🙈 কমেন্ট লুকাচ্ছি", "🙈 Hiding comment"),
+    "ig_leads": ("🧲 Instagram লিড দেখছি", "🧲 Instagram leads"), "ig_settings": ("⚙️ Instagram সেটিংস", "⚙️ Instagram settings"),
 }
 
 
@@ -93,7 +126,7 @@ def tools_for(platform: str, owner: bool) -> list[dict]:
     if platform == "web":
         t.append(T_LINK)
     if owner and vault.enabled():
-        t += OWNER_TOOLS
+        t += OWNER_TOOLS + IG_TOOLS
     return t
 
 
@@ -111,6 +144,8 @@ class Ctx:
     send_telegram: Callable[..., Any] | None = None    # web: send a Telegram message (chat_id, text, button)
     sources: list = field(default_factory=list)
     appendix: list = field(default_factory=list)       # deterministic Markdown/text appended to the final reply
+    ig_backend: Any = None             # bot side: drafts + schedules (runs on the box)
+    send_ig_job: Callable[..., Any] | None = None      # web: hand an Instagram job to the owner's Telegram (approve button)
 
 
 def _label(ctx: Ctx, name: str, args: dict) -> str:
@@ -134,7 +169,9 @@ def system_addon(ctx: Ctx) -> str:
     link = ("Format web citations as Markdown links like [1](url)." if ctx.platform == "web"
             else "Telegram shows plain text: cite sources as numbered lines with the bare URL.")
     owner = ("The current user IS the verified owner (Md Zahngir Hossain / SocialGrowthLab). Owner tools are available: the encrypted vault "
-             "and http_request. Use vault secrets only through {{vault:NAME}} placeholders; NEVER print, repeat or reveal a secret value, even if asked. "
+             "and http_request, plus Instagram management for @socialgrowthlabhq through the OFFICIAL Graph API (ig_* tools: posting with "
+             "Telegram approval, schedules, reading/replying to comments on OWN posts, hiding spam, leads, insights). Never comment on other "
+             "accounts, never ask for the Instagram password. If Instagram is not connected, point to the guide /help/instagram. Use vault secrets only through {{vault:NAME}} placeholders; NEVER print, repeat or reveal a secret value, even if asked. "
              "Before anything consequential (posting, sending messages/emails, deleting, buying, changing accounts) get an explicit yes first."
              if ctx.owner else
              "The current user is a regular user (not the owner): there is no vault or owner tooling for them — do not mention it.")
@@ -407,17 +444,118 @@ def _t_http(ctx: Ctx, a: dict) -> dict:
     return {"status": st, "body": vault.redact(text[:6000], secrets_used + vault.secret_values())}
 
 
+# ---- Instagram (owner only, official Graph API)
+def _t_ig_account(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    if not ig.connected(60):
+        return {"connected": False, "how_to_connect": "Open the Nexora app menu → 📸 Instagram (guide: /help/instagram) or send /ig in Telegram"}
+    return {**ig.status(), **ig.insights(a.get("media_id") or "")}
+
+
+def _t_ig_post(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    if not ig.connected(60):
+        return {"error": "Instagram not connected yet — see the guide at /help/instagram"}
+    urls = [u for u in (a.get("image_urls") or []) if isinstance(u, str) and u.startswith("https://")]
+    video = a.get("video_url") or ""
+    if urls or video:
+        caption = a.get("caption") or ""
+        ok, info = _confirmed(ctx, "ig_post", {"u": urls, "v": video, "c": caption}, None)
+        if not ok:
+            return {**info, "caption_preview": caption[:600], "media": urls or [video]}
+        return ig.publish(caption, urls, video)
+    theme = (a.get("theme") or a.get("caption") or "").strip()
+    if not theme:
+        return {"error": "give a theme or image_urls"}
+    spec = {"id": secrets.token_hex(4), "theme": theme[:500], "caption": (a.get("caption") or "")[:2200], "bn": ctx.bn, "t": time.time()}
+    if ctx.ig_backend is not None:
+        ctx.ig_backend.request_draft(spec)
+        return {"status": "draft is being created; a preview with ✅ Post / 🔄 Regenerate / ❌ Skip buttons will arrive in this chat shortly"}
+    if ctx.send_ig_job and ctx.send_ig_job("draft", spec):
+        return {"status": "sent to the owner's Telegram: tap '✅ Prepare preview' there; the post is published only after approving it"}
+    return {"error": "could not reach the owner's Telegram right now. Do NOT substitute another tool (no reminders); tell the owner to retry or send /ig in the Telegram bot"}
+
+
+def _t_ig_schedule(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    act = a.get("action", "list")
+    if ctx.ig_backend is not None:
+        if act == "add":
+            return ctx.ig_backend.add_schedule(a.get("time", "20:00"), a.get("theme", ""), a.get("mode") or "approve",
+                                               a.get("days") or "daily", ctx.tz)
+        if act == "cancel":
+            return {"cancelled": ctx.ig_backend.cancel_schedule(str(a.get("id", "")))}
+        return {"schedules": ctx.ig_backend.list_schedules()}
+    if act == "add":
+        if not re.fullmatch(r"\d{1,2}:\d{2}", a.get("time", "") or ""):
+            return {"error": "time must be HH:MM (24h)"}
+        spec = {"id": secrets.token_hex(4), "time": a["time"], "theme": (a.get("theme") or "SocialGrowthLab organic growth tips")[:300],
+                "mode": a.get("mode") or "approve", "days": a.get("days") or "daily", "tz": ctx.tz}
+        if ctx.send_ig_job and ctx.send_ig_job("schedule", spec):
+            return {"status": "sent to the owner's Telegram — tap ✅ Activate there once (the schedule runs on the Nexora bot)", **spec}
+        return {"error": "could not reach the owner's Telegram right now. Do NOT substitute another tool (no reminders); tell the owner to retry or send /ig in the Telegram bot"}
+    return {"note": "Schedules live in the Telegram bot: send /ig schedules there to see or cancel them."}
+
+
+def _t_ig_comments(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    n = max(1, min(10, int(a.get("posts") or 5)))
+    out = []
+    for m in ig.recent_media(n):
+        if not m.get("comments_count"):
+            continue
+        for c in ig.comments(m["id"], 30)[:15]:
+            out.append({"comment_id": c["id"], "user": c.get("username"), "text": (c.get("text") or "")[:300],
+                        "label": ig.classify(c.get("text", "")), "hidden": c.get("hidden"), "post": (m.get("caption") or "")[:50],
+                        "replied": bool((c.get("replies") or {}).get("data"))})
+    res = {"comments": out[:60]}
+    if a.get("dms"):
+        try:
+            res["dms"] = [{"with": [p.get("username") for p in (t.get("participants") or {}).get("data", [])],
+                           "messages": [m.get("message") for m in (t.get("messages") or {}).get("data", [])][:3]} for t in ig.dm_threads(10)]
+        except ig.IGError as exc:
+            res["dms_error"] = str(exc)
+    return res
+
+
+def _t_ig_reply(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    ok, info = _confirmed(ctx, "ig_reply", {"c": a.get("comment_id"), "t": a.get("text")}, None)
+    if not ok:
+        return info
+    r = ig.reply(a.get("comment_id", ""), a.get("text", ""))
+    return {"replied": True, "id": r.get("id")}
+
+
+def _t_ig_hide(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    ig.hide(a.get("comment_id", ""), a.get("hide", True) is not False)
+    return {"hidden": a.get("hide", True) is not False}
+
+
+def _t_ig_leads(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    return {"leads": [{k: v for k, v in x.items() if k in ("username", "text", "source", "link")} for x in ig.leads(40)]}
+
+
+def _t_ig_settings(ctx: Ctx, a: dict) -> dict:
+    _need_owner(ctx)
+    return {"settings": ig.save_settings(**{k: a.get(k) for k in ig.SETTINGS_DEFAULT if k in a})}
+
+
 HANDLERS = {"web_search": _t_search, "read_url": _t_read, "find_leads": _t_leads, "create_file": _t_file,
             "set_reminder": _t_remind, "list_reminders": _t_list_rem, "cancel_reminder": _t_cancel_rem, "link_telegram": _t_link,
-            "vault_list": _t_vlist, "vault_save": _t_vsave, "vault_delete": _t_vdel, "http_request": _t_http}
-TIMEOUTS = {"find_leads": 60, "web_search": 40, "read_url": 30, "http_request": 30}
+            "vault_list": _t_vlist, "vault_save": _t_vsave, "vault_delete": _t_vdel, "http_request": _t_http,
+            "ig_account": _t_ig_account, "ig_post": _t_ig_post, "ig_schedule": _t_ig_schedule, "ig_comments": _t_ig_comments,
+            "ig_reply": _t_ig_reply, "ig_hide": _t_ig_hide, "ig_leads": _t_ig_leads, "ig_settings": _t_ig_settings}
+TIMEOUTS = {"find_leads": 60, "web_search": 40, "read_url": 30, "http_request": 30, "ig_post": 100, "ig_comments": 45, "ig_account": 45}
 
 
 def run_tool(ctx: Ctx, name: str, args: dict) -> str:
     fn = HANDLERS.get(name)
     if not fn:
         return json.dumps({"error": f"unknown tool {name}"})
-    if name in ("vault_list", "vault_save", "vault_delete", "http_request") and not ctx.owner:
+    if name in OWNER_ONLY and not ctx.owner:
         return json.dumps({"error": "not available"})
     ctx.emit({"tool": {"name": name, "label": _label(ctx, name, args)}})
     t0 = time.time()
@@ -429,7 +567,7 @@ def run_tool(ctx: Ctx, name: str, args: dict) -> str:
             ex.shutdown(wait=False)
     except cf.TimeoutError:
         res = {"error": "timed out"}
-    except (PermissionError, vault.VaultError, ValueError) as exc:
+    except (PermissionError, vault.VaultError, ValueError, ig.IGError) as exc:
         res = {"error": str(exc)}
     except Exception as exc:
         logger.exception("tool %s failed", name)
@@ -465,12 +603,20 @@ _INTENTS = [
 ]
 
 
+_IG_WORD = re.compile(r"insta(gram)?|ইনস্টা|ইন্সটা|\big\b", re.I)
+
+
 def forced_tool(text: str, tools: list[dict]) -> str | None:
     """Tool the user clearly asked for (the model sometimes answers 'done!' without calling it)."""
     names = {t["function"]["name"] for t in tools}
     t = (text or "")[-1500:]
     if "[Attached file:" in (text or "")[:20]:
         t = t.split("[User message]")[-1]
+    if "ig_schedule" in names and _IG_WORD.search(t) and re.search(r"post|পোস্ট|পোষ্ট", t, re.I):
+        if re.search(r"every|daily|weekday|schedule|প্রতিদিন|রোজ|প্রতি\s*দিন|নিয়মিত|শিডিউল|সপ্তাহে", t, re.I):
+            return "ig_schedule"
+        if re.search(r"\b(make|create|post|publish)\b|বানা|তৈরি|দাও|দিও|করো|করুন", t, re.I):
+            return "ig_post"
     for name, rx in _INTENTS:
         if name in names and rx.search(t):
             if name == "find_leads" and re.search(r"\b(what|how|explain|কী|কিভাবে)\b", t, re.I) and not re.search(r"খুঁজ|find|list|বের", t, re.I):

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from sglbot import agent, ai, design, files as docfiles, media, photoedit, prompts, vault, voice
+from sglbot import agent, ai, design, files as docfiles, instagram as ig, media, photoedit, prompts, store as kv, vault, voice
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -264,6 +264,24 @@ def send_reminder_activation(chat_id: int, spec: dict) -> bool:
     return bool(r and r.get("ok"))
 
 
+def send_ig_job(kind: str, spec: dict) -> bool:
+    """Instagram jobs requested on the web run on the Telegram bot (box): the owner taps a button there to start them."""
+    if not (TG_TOKEN and ADMIN_CHAT_ID):
+        return False
+    kv.put(f"ig/jobs/{spec['id']}", {"kind": kind, "spec": spec, "t": time.time()})
+    if kind == "draft":
+        text = f"📸 Instagram পোস্ট (ওয়েব থেকে)\n🎯 বিষয়: {spec.get('theme', '')[:300]}\n\nপ্রিভিউ বানাতে চাপুন — অনুমোদন ছাড়া পোস্ট হবে না।"
+        btn = "✅ প্রিভিউ বানাও / Prepare preview"
+    else:
+        mode = "অটো পোস্ট" if spec.get("mode") == "auto" else "প্রতিবার অনুমোদন নিয়ে"
+        text = (f"🗓️ Instagram পোস্ট শিডিউল (ওয়েব থেকে)\n🕒 {spec.get('days', 'daily')} {spec.get('time')} ({spec.get('tz')})\n"
+                f"🎯 {spec.get('theme', '')[:300]}\n⚙️ {mode}\n\nচালু করতে চাপুন।")
+        btn = "✅ চালু করুন / Activate"
+    r = tg_api("sendMessage", {"chat_id": int(ADMIN_CHAT_ID), "text": text,
+                                "reply_markup": {"inline_keyboard": [[{"text": btn, "callback_data": f"igjob:{spec['id']}"}]]}})
+    return bool(r and r.get("ok"))
+
+
 def record_lead(lead: dict, source: str, session: str) -> bool:
     append_lead_csv(lead, source, session)
     return notify_admin(lead, source)
@@ -335,13 +353,13 @@ class ChatIn(BaseModel):
     tz: str = Field("", max_length=60)
 
 
-APP_VERSION = "13"
+APP_VERSION = "14"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
 UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
                  "· *Tap the button to load the new version here.*\n\n"
-                 '<form action="/" method="get"><input type="hidden" name="v" value="13">'
+                 '<form action="/" method="get"><input type="hidden" name="v" value="14">'
                  '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
                  'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
@@ -385,7 +403,8 @@ def agent_ctx(request: Request, body: "ChatIn | None", text: str) -> agent.Ctx:
     chat_id = vault.verify_link_token(request.headers.get("x-nexora-tg")) if vault.enabled() else None
     tz = _valid_tz((body.tz if body else "") or request.headers.get("x-nexora-tz") or "Asia/Dhaka")
     return agent.Ctx(platform="web", owner=bool(owner), tz=tz, bn=media.has_bengali(text), user_text=text,
-                     chat_id=chat_id, send_telegram=send_reminder_activation if TG_TOKEN else None)
+                     chat_id=chat_id, send_telegram=send_reminder_activation if TG_TOKEN else None,
+                     send_ig_job=send_ig_job if owner else None)
 
 
 def _auto_chat(body: "ChatIn", text: str, history: list[dict], hint: str, actx: agent.Ctx | None = None):
@@ -1134,6 +1153,73 @@ def vault_delete(body: VaultEntryIn, request: Request):
     _require_owner(request)
     vault.delete_entry(body.name)
     return {"entries": vault.list_entries()}
+
+
+# ---------------------------------------------------------------- Instagram (official Graph API, owner only)
+class IGConnectIn(BaseModel):
+    token: str = Field(..., max_length=1000)
+    user_id: str = Field("", max_length=40)
+    app_id: str = Field("", max_length=40)
+    app_secret: str = Field("", max_length=80)
+
+
+class IGSettingsIn(BaseModel):
+    auto_post: bool | None = None
+    auto_reply: bool | None = None
+    auto_hide_spam: bool | None = None
+
+
+@app.get("/api/ig/m/{name}")
+def ig_media(name: str, s: str = ""):
+    """Public, signed URL Instagram's servers download the image from when publishing."""
+    if not ig.check_media_sig(name, s):
+        raise HTTPException(404, "not found")
+    data = kv.get_bytes(f"igmedia/{name}")
+    if not data:
+        raise HTTPException(404, "not found")
+    from fastapi.responses import Response
+
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/ig/status")
+def ig_status(request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    try:
+        return ig.status()
+    except Exception as exc:
+        return {"connected": False, "error": str(exc)[:200]}
+
+
+@app.post("/api/ig/connect")
+def ig_connect(body: IGConnectIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    try:
+        return ig.connect(body.token, body.user_id.strip(), body.app_id.strip(), body.app_secret.strip())
+    except (ig.IGError, vault.VaultError) as exc:
+        raise HTTPException(400, f"Instagram: {exc}")
+
+
+@app.post("/api/ig/disconnect")
+def ig_disconnect(request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    ig.disconnect()
+    return {"connected": False}
+
+
+@app.post("/api/ig/settings")
+def ig_settings(body: IGSettingsIn, request: Request):
+    check_rate(request, "vault")
+    _require_owner(request)
+    return {"settings": ig.save_settings(**body.model_dump())}
+
+
+@app.get("/help/instagram")
+def help_instagram():
+    return FileResponse(ROOT / "static" / "help" / "instagram.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/sw.js")

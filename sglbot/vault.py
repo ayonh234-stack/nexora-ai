@@ -55,8 +55,8 @@ def _dec(box: dict):
     return json.loads(pt)
 
 
-def _load() -> dict:
-    return _dec(store.get("vault/entries", None))
+def _load(max_age: float = 0) -> dict:
+    return _dec(store.get("vault/entries", None, max_age=max_age))
 
 
 def _save(entries: dict) -> None:
@@ -87,16 +87,23 @@ def delete_entry(name: str) -> bool:
     return False
 
 
-def get_value(name: str) -> str:
-    e = _load()
+def get_value(name: str, max_age: float = 0) -> str:
+    e = _load(max_age)
     if name not in e:
         raise VaultError(f"no vault entry named {name}")
     return e[name]["value"]
 
 
+def has_entry(name: str, max_age: float = 0) -> bool:
+    try:
+        return name in _load(max_age)
+    except Exception:
+        return False
+
+
 def secret_values() -> list[str]:
     try:
-        return [v["value"] for v in _load().values() if len(v.get("value", "")) >= 4]
+        return [v["value"] for v in _load(30).values() if len(v.get("value", "")) >= 4]
     except Exception:
         return []
 

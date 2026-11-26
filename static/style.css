@@ -203,3 +203,5 @@ audio.voice-audio { display: block; width: 100%; max-width: 340px; height: 40px;
 .vault-list li > span:first-child { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .vault-list small { color: var(--muted); font-size: 12px; } .vault-list .vv { color: var(--muted); letter-spacing: 2px; }
 .vault-add summary { cursor: pointer; margin-bottom: 10px; font-weight: 600; }
+.tog { display: flex !important; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.tog input { width: 18px !important; height: 18px; margin: 0 !important; display: inline-block !important; flex: none; }
