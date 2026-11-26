@@ -122,7 +122,7 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   function url(u) { return u && u.startsWith("/") ? API + u : u; }
   function md(text) { return DOMPurify.sanitize(marked.parse(text || "", { breaks: true, gfm: true }), { ADD_ATTR: ["target"] }); }
-  const CLIENT_VERSION = "11";
+  const CLIENT_VERSION = "12";
   async function api(path, opts) {
     opts = opts || {}; opts.headers = Object.assign({ "X-Nexora-Client": CLIENT_VERSION }, opts.headers || {});
     return fetch(API + path, opts);
@@ -223,7 +223,8 @@
       const media = m.type === "image"
         ? `<img class="gen${m.fname && m.fname.endsWith(".png") ? " checker" : ""}" src="${esc(url(m.url))}" alt="${esc(m.prompt || "")}" referrerpolicy="no-referrer">`
         : `<video class="gen" src="${esc(url(m.url))}" controls autoplay loop muted playsinline></video>`;
-      body.innerHTML = (m.content ? `<div class="md">${md(m.content)}</div>` : "") + media + (m.prompt ? `<div class="progress">${m.fname ? "✅" : m.type === "video" ? "🎬" : "🎨"} ${esc(m.prompt)}</div>` : "");
+      body.innerHTML = (m.content ? `<div class="md">${md(m.content)}</div>` : "") +
+        (m.compare ? `<img class="gen compare" src="${esc(m.compare)}" alt="before / after">` : "") + media + (m.prompt ? `<div class="progress">${m.fname ? "✅" : m.type === "video" ? "🎬" : "🎨"} ${esc(m.prompt)}</div>` : "");
     } else {
       const div = document.createElement("div"); div.className = "md" + (m.error ? " err" : "") + (m.streaming ? " cursor" : "");
       div.innerHTML = md(m.content); body.appendChild(div);
@@ -507,7 +508,7 @@
           if (!bg) note = "✅ " + t("bgFallback");
           img = await compositeCutout(cutout, bg);
         }
-        Object.assign(bot.m, { pending: false, type: "image", url: img, prompt: note.replace(/^✅\s*/, ""), content: "", progress: "", fname: j.op === "remove_bg" ? "nexora-no-background.png" : "nexora-edit.jpg" });
+        Object.assign(bot.m, { pending: false, type: "image", url: img, prompt: note.replace(/^✅\s*/, ""), content: "", compare: j.compare || null, progress: "", fname: j.op === "remove_bg" ? "nexora-no-background.png" : j.op === "enhance" ? "nexora-hd.jpg" : "nexora-edit.jpg" });
       } else Object.assign(bot.m, { pending: false, content: j.reply, progress: "" });
     } catch (e) { Object.assign(bot.m, { pending: false, error: true, content: e.message || t("netErr"), progress: "" }); }
     refresh(bot);

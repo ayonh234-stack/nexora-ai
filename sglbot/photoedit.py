@@ -36,15 +36,21 @@ FLUX_SPACE = "black-forest-labs/FLUX.1-schnell"
 # Qwen-Image-Edit asks for 240 s of GPU, above the anonymous ZeroGPU limit, so only Kontext is used.
 EDIT_SPACES = ("black-forest-labs/FLUX.1-Kontext-Dev",)
 
-OPS = ("none", "remove_bg", "replace_bg", "edit")
+OPS = ("none", "remove_bg", "replace_bg", "enhance", "edit")
 
 _EDIT_WORDS = re.compile(
     r"(background|backdrop|\bbg\b|ব্যাকগ্রাউন্ড|ব্যাকগ্রাউন্ড|ব্যাক গ্রাউন্ড|পেছন|পিছন|পটভূমি|"
     r"\bedit|এডিট|change|replace|remove|erase|বদল|পরিবর্তন|পাল্টা|সরা|মুছ|"
     r"\badd\b|যোগ কর|বসা|make (it|me|this|the)|turn (it|this|me)|convert|cartoon|anime|"
-    r"ঠিক কর|সুন্দর কর|transparent|png|cut ?out|কাট)",
+    r"ঠিক কর|সুন্দর কর|transparent|png|cut ?out|কাট|" + r"\bhd\b|enhance|restore|upscale|sharpen|clear|clarity|visible|quality|fresh|brighten|"
+    r"ঝকঝকে|পরিষ্কার|স্পষ্ট|উজ্জ্বল|রিস্টোর|এইচডি|ঝাপসা|পুরোনো|পুরানো|কোয়ালিটি)",
     re.IGNORECASE,
 )
+
+
+ENHANCE_RE = re.compile(
+    r"(\bhd\b|enhance|restore|upscale|sharpen|clear(er)?\b|clarity|more visible|high quality|quality|fresh|brighten|4k|"
+    r"ঝকঝকে|পরিষ্কার|স্পষ্ট|উজ্জ্বল|রিস্টোর|এইচডি|ঝাপসা|কোয়ালিটি|পুরোনো ছবি|পুরানো ছবি)", re.IGNORECASE)
 
 
 class EditError(RuntimeError):
@@ -67,6 +73,7 @@ Decide what they want and answer ONLY with JSON: {"op": "...", "background": "..
 op values:
 - "remove_bg": remove/erase the background or make it transparent / PNG cutout.
 - "replace_bg": change/replace the background with something else (background = short English description of the NEW background, e.g. "sunny tropical beach with blue sea"; if the user did not say what, invent a tasteful one that fits).
+- "enhance": improve the SAME photo without changing its content — make it clearer/sharper/HD/high quality, brighter or more visible, restore an old/faded/blurry photo, fix colours, upscale, "make it fresh".
 - "edit": any other change to the photo itself (style, objects, colours, lighting, clothes, cartoon...) — instruction = clear English edit instruction.
 - "none": the user only asks a question about the photo, wants a description, caption, text extraction, advice, etc. (no change to the picture).
 Message: """
@@ -111,6 +118,8 @@ def plan_edit(api_key: str, model: str, text: str) -> EditPlan:
         r"(to |with |দিয়ে|করে দাও .*ব্যাকগ্রাউন্ড|change|replace|বদল|পরিবর্তন)", low
     ):
         return EditPlan("remove_bg")
+    if ENHANCE_RE.search(low) and not re.search(r"(background|backdrop|\bbg\b|ব্যাকগ্রাউন্ড|cartoon|anime)", low):
+        return EditPlan("enhance", instruction=text[:600])
     if re.search(r"(background|backdrop|\bbg\b|ব্যাকগ্রাউন্ড|পেছন|পিছন|পটভূমি)", low):
         return EditPlan("replace_bg", background=text[:300])
     return EditPlan("edit", instruction=text[:600])
@@ -473,3 +482,144 @@ def instruct_edit(image: bytes, instruction: str) -> tuple[bytes, str]:
 
 def data_url(data: bytes, mime: str) -> str:
     return f"data:{mime};base64," + base64.b64encode(data).decode()
+
+
+# ---------------------------------------------------------------- enhance / restore / HD
+ENHANCE_SPACES = ("sczhou/CodeFormer", "Nick088/Real-ESRGAN_Pytorch")
+
+
+def _stretch(im, low_pct: float = 0.6, high_pct: float = 99.4, strength: float = 0.85):
+    """Per-channel auto-levels: removes the faded haze and most of the colour cast (white balance)."""
+    from PIL import Image
+
+    luts = []
+    for ch in im.split():
+        hist = ch.histogram(); total = sum(hist) or 1
+        acc, lo, hi = 0, 0, 255
+        for i, n in enumerate(hist):
+            acc += n
+            if acc >= total * low_pct / 100:
+                lo = i; break
+        acc = 0
+        for i in range(255, -1, -1):
+            acc += hist[i]
+            if acc >= total * (100 - high_pct) / 100:
+                hi = i; break
+        if hi - lo < 30:
+            lo, hi = 0, 255
+        lut = []
+        for v in range(256):
+            t = min(255.0, max(0.0, (v - lo) * 255.0 / (hi - lo)))
+            lut.append(int(round(v + (t - v) * strength)))
+        luts.extend(lut)
+    return im.point(luts)
+
+
+def enhance_local(data: bytes, max_side: int = 2400, upscale: bool = True) -> bytes:
+    """Always-available, CPU-only restoration: auto-levels + white balance, gentle gamma, colour, light
+    denoise, 2x Lanczos upscale and two-pass unsharp mask. Returns JPEG bytes."""
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
+
+    im = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    if max(im.size) > 3000:
+        im.thumbnail((3000, 3000), Image.LANCZOS)
+    im = _stretch(im)
+    mean = ImageStat.Stat(im.convert("L")).mean[0] / 255.0
+    if mean < 0.42:  # lift a dark/underexposed photo
+        g = max(0.65, min(1.0, math_log(0.5) / math_log(max(mean, 0.05))))
+        im = im.point([int(255 * ((v / 255.0) ** g)) for v in range(256)] * 3)
+    elif mean > 0.68:  # tame a washed-out one
+        im = im.point([int(255 * ((v / 255.0) ** 1.15)) for v in range(256)] * 3)
+    im = ImageEnhance.Contrast(im).enhance(1.08)
+    im = ImageEnhance.Color(im).enhance(1.22)
+    im = Image.blend(im, im.filter(ImageFilter.MedianFilter(3)), 0.45)  # light denoise before sharpening
+    if upscale:
+        f = min(2.0, max_side / max(im.size))
+        if f > 1.05:
+            im = im.resize((int(im.width * f), int(im.height * f)), Image.LANCZOS)
+    im = im.filter(ImageFilter.UnsharpMask(radius=2.2, percent=95, threshold=3))
+    im = im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=60, threshold=2))
+    out = io.BytesIO(); im.save(out, "JPEG", quality=93, optimize=True)
+    return out.getvalue()
+
+
+def math_log(x: float) -> float:
+    import math
+
+    return math.log(x)
+
+
+def _ai_upscale(data: bytes, deadline: float) -> tuple[bytes, str] | None:
+    """Free face/detail restoration Spaces (ZeroGPU; quota per IP). None when busy or out of quota."""
+    import tempfile
+    from gradio_client import handle_file
+
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+        tf.write(data); path = tf.name
+    try:
+        for space in ENHANCE_SPACES:
+            if time.time() > deadline:
+                break
+            try:
+                c = _hf_client(space)
+                if space == "sczhou/CodeFormer":
+                    r = c.predict(handle_file(path), True, True, True, 2, 0.7, api_name="/inference")
+                    r = r[0] if isinstance(r, (list, tuple)) else r
+                else:
+                    r = c.predict(handle_file(path), 2, api_name="/predict")
+                fp = r.get("path") if isinstance(r, dict) else r
+                with open(fp, "rb") as fh:
+                    out = fh.read()
+                if len(out) > 5000:
+                    return out, space
+            except Exception as exc:
+                logger.warning("enhance space %s failed: %s", space, str(exc)[:160])
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    return None
+
+
+def enhance_photo(data: bytes, try_ai: bool = True, ai_budget: float = 50.0) -> tuple[bytes, str]:
+    """Restore/HD a photo. Colours and haze are always fixed locally; detail comes from a free AI
+    upscaler when one answers, otherwise from the local 2x upscale + sharpening. Never fails."""
+    from PIL import Image
+
+    corrected = enhance_local(data, upscale=False)
+    if try_ai:
+        got = _ai_upscale(corrected, time.time() + ai_budget)
+        if got:
+            im = Image.open(io.BytesIO(got[0])).convert("RGB")
+            if max(im.size) > 2400:
+                im.thumbnail((2400, 2400), Image.LANCZOS)
+            out = io.BytesIO(); im.save(out, "JPEG", quality=93, optimize=True)
+            return out.getvalue(), got[1]
+    return enhance_local(data), "local-enhance"
+
+
+def before_after(before: bytes, after: bytes, bengali: bool = False) -> bytes:
+    """Side-by-side comparison (same height) with small labels."""
+    from PIL import Image, ImageDraw, ImageOps
+
+    a = ImageOps.exif_transpose(Image.open(io.BytesIO(before))).convert("RGB")
+    b = Image.open(io.BytesIO(after)).convert("RGB")
+    h = min(900, max(a.height, 300))
+    a = a.resize((max(1, a.width * h // a.height), h), Image.LANCZOS)
+    b = b.resize((max(1, b.width * h // b.height), h), Image.LANCZOS)
+    gap = 8
+    c = Image.new("RGB", (a.width + b.width + gap, h), "white")
+    c.paste(a, (0, 0)); c.paste(b, (a.width + gap, 0))
+    d = ImageDraw.Draw(c)
+    try:
+        from sglbot.design import _font
+        f = _font("SemiBold", max(18, h // 26))
+    except Exception:
+        f = None
+    for x, label in ((10, "আগে · Before" if bengali else "Before"), (a.width + gap + 10, "পরে · After" if bengali else "After")):
+        box = d.textbbox((x + 8, 10), label, font=f)
+        d.rounded_rectangle([box[0] - 8, box[1] - 6, box[2] + 8, box[3] + 6], radius=8, fill=(0, 0, 0))
+        d.text((x + 8, 10), label, font=f, fill="white")
+    out = io.BytesIO(); c.save(out, "JPEG", quality=88)
+    return out.getvalue()

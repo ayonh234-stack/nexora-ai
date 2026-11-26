@@ -303,12 +303,15 @@ class ChatIn(BaseModel):
     stream: bool = True
 
 
-APP_VERSION = "11"
+APP_VERSION = "12"
 # Pages loaded before the ChatGPT-style release (tabs UI, app.js v<=7) don't send X-Nexora-Client.
 # They may live on in a phone's memory/cache, so their requests are answered in a shape the old code
 # can show (plain reply / image URL) plus a one-tap link to the new version.
-UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে!** নতুন ডিজাইন পেতে [এখানে চাপুন](/?v=11) "
-                 "(বা পেজটা একবার রিফ্রেশ করুন)। · *Nexora was updated — [tap here](/?v=11) to load the new version.*\n\n---\n\n")
+UPDATE_NOTICE = ("🔄 **Nexora আপডেট হয়েছে! · Nexora was updated!** নিচের বাটনে চাপ দিন, নতুন ভার্সন এখানেই খুলবে। "
+                 "· *Tap the button to load the new version here.*\n\n"
+                 '<form action="/" method="get"><input type="hidden" name="v" value="12">'
+                 '<button type="submit" style="padding:10px 18px;border-radius:999px;border:0;background:#10a37f;color:#fff;'
+                 'font-size:16px;font-weight:600">🔄 নতুন ভার্সন খুলুন · Update now</button></form>\n\n---\n\n')
 
 
 def is_legacy(request: Request) -> bool:
@@ -748,8 +751,25 @@ async def tts(body: TtsIn, request: Request):
     return {"audio": audio}
 
 
+async def _enhance(data: bytes, bn: bool) -> tuple[str, str, str]:
+    """(enhanced data URL, before/after data URL, caption). Never fails: local restoration is the floor."""
+    try:
+        out, src = await asyncio.wait_for(asyncio.to_thread(photoedit.enhance_photo, data, True, 40.0), timeout=75)
+    except Exception as exc:
+        logger.warning("AI enhance path failed, local only: %s", exc)
+        out, src = await asyncio.to_thread(photoedit.enhance_local, data), "local-enhance"
+    cmp = await asyncio.to_thread(photoedit.before_after, data, out, bn)
+    how = ("AI রিস্টোর" if bn else "AI restore") if src != "local-enhance" else ("অটো-এনহান্স" if bn else "auto-enhance")
+    cap = (f"✅ ছবিটা আরও পরিষ্কার, উজ্জ্বল আর HD (২x) করা হয়েছে ({how})। বাঁয়ে আগে, ডানে পরে।"
+           if bn else f"✅ Photo enhanced: clearer, brighter colours and HD 2x ({how}). Left = before, right = after.")
+    return photoedit.data_url(out, "image/jpeg"), photoedit.data_url(cmp, "image/jpeg"), cap
+
+
 async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
     bn = media.has_bengali(request_text)
+    if plan.op == "enhance":
+        img, cmp, cap = await _enhance(data, bn)
+        return {"edit": True, "op": "enhance", "image": img, "compare": cmp, "reply": cap, "source": "enhance"}
     if plan.op in ("remove_bg", "replace_bg"):
         reply_rm = "✅ ব্যাকগ্রাউন্ড সরানো হয়েছে (স্বচ্ছ PNG)।" if bn else "✅ Background removed (transparent PNG)."
         bg_desc = plan.background or ""
@@ -806,6 +826,10 @@ async def _photo_edit(data: bytes, plan, request_text: str) -> dict:
 async def _legacy_photo_edit(data: bytes, plan, request_text: str) -> dict:
     """Finished edit for old pages: everything is done on the server and returned as an inline image."""
     bn = media.has_bengali(request_text)
+    if plan.op == "enhance":
+        img, cmp, cap = await _enhance(data, bn)
+        return {"reply": f'{UPDATE_NOTICE}{cap}\n\n<img src="{cmp}" alt="before / after" style="max-width:100%;height:auto;border-radius:12px">'
+                         f'\n\n<img src="{img}" alt="enhanced photo" style="max-width:100%;height:auto;border-radius:12px">'}
     try:
         if plan.op == "remove_bg":
             png, _ = await asyncio.wait_for(asyncio.to_thread(photoedit.remove_background, data), timeout=80)
