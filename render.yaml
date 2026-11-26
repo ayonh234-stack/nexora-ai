@@ -1,0 +1,16 @@
+# Render Blueprint — free web service (no credit card). New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: nexora-ai
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_CHAT_ID
+        sync: false
+      - key: HF_TOKEN
+        sync: false

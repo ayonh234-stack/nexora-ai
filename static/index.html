@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Nexora AI — Your AI. Your Business. Your World.</title>
+  <meta name="description" content="Nexora AI is your all-in-one intelligent assistant for business, productivity, creativity and everyday life." />
+  <meta name="theme-color" content="#0b0b14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Nexora AI" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css?v=2" />
+</head>
+<body>
+  <div class="app">
+    <aside class="drawer" id="drawer" aria-label="Chat history">
+      <div class="drawer-head">
+        <div class="brand small"><img src="/icons/icon.svg" alt="" /><span>Nexora AI</span></div>
+        <button class="icon-btn" id="closeDrawer" aria-label="Close">✕</button>
+      </div>
+      <button class="new-chat" id="newChat2"><span>＋</span> <span data-i18n="newChat">নতুন চ্যাট</span></button>
+      <div class="history-list" id="historyList"></div>
+      <div class="drawer-foot">
+        <button class="ghost-btn" id="langBtn">🌐 <span id="langLabel">English</span></button>
+        <button class="ghost-btn" id="serverBtn" hidden>⚙ <span data-i18n="server">সার্ভার URL</span></button>
+        <button class="ghost-btn" id="installBtn" hidden>⬇ <span data-i18n="install">অ্যাপ ইনস্টল</span></button>
+        <button class="ghost-btn danger" id="clearAll" data-i18n="clearAll">সব ইতিহাস মুছুন</button>
+        <p class="foot-note">© SocialGrowthLab · Md Zahngir Hossain</p>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn" id="openDrawer" aria-label="Menu">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <div class="brand">
+          <img src="/icons/icon.svg" alt="Nexora AI logo" />
+          <div>
+            <h1>Nexora AI</h1>
+            <p class="tagline">Your AI. Your Business. Your World.</p>
+          </div>
+        </div>
+        <button class="icon-btn" id="newChat" aria-label="New chat" title="New chat">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <nav class="modes" id="modes" role="tablist"></nav>
+
+      <section class="messages" id="messages" aria-live="polite"></section>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="photo-preview" id="photoPreview" hidden>
+          <img id="photoThumb" alt="" />
+          <button type="button" class="chip-x" id="removePhoto" aria-label="Remove photo">✕</button>
+        </div>
+        <div class="composer-row">
+          <label class="icon-btn attach" title="Photo" aria-label="Attach photo">
+            <input type="file" id="photoInput" accept="image/*" hidden />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.8" fill="currentColor"/><path d="M4.5 17l5-5 4 4 2.5-2.5L20 17" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </label>
+          <textarea id="input" rows="1" placeholder="Nexora-কে কিছু জিজ্ঞেস করুন…" enterkeyhint="send"></textarea>
+          <button class="send" id="sendBtn" type="submit" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <p class="hint" id="hint"></p>
+      </form>
+    </main>
+  </div>
+
+  <dialog id="leadDialog" class="sheet">
+    <form method="dialog" id="leadForm">
+      <h2 data-i18n="leadTitle">ফ্রি গ্রোথ কনসালটেশন</h2>
+      <p class="muted" data-i18n="leadSub">তথ্য দিন, Md Zahngir Hossain নিজে যোগাযোগ করবেন।</p>
+      <label><span data-i18n="fName">নাম</span><input name="name" required maxlength="120" /></label>
+      <label><span data-i18n="fIg">Instagram handle</span><input name="ig_handle" required maxlength="200" placeholder="@yourbrand" /></label>
+      <label><span data-i18n="fBudget">বাজেট</span><input name="budget" required maxlength="120" placeholder="$100–200 / month" /></label>
+      <label><span data-i18n="fContact">যোগাযোগ (Email / WhatsApp / Telegram)</span><input name="contact" required minlength="3" maxlength="200" /></label>
+      <div class="sheet-actions">
+        <button type="button" class="ghost-btn" id="leadCancel" data-i18n="cancel">বাতিল</button>
+        <button type="submit" class="primary-btn" id="leadSubmit" data-i18n="submit">পাঠান</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/purify.min.js"></script>
+  <script src="/config.js"></script>
+  <script src="/app.js?v=2"></script>
+</body>
+</html>

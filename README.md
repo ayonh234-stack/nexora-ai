@@ -1,0 +1,41 @@
+# Nexora AI — web app (PWA) + Android app
+
+*Your AI. Your Business. Your World.* — by Md Zahngir Hossain / SocialGrowthLab.
+
+## What's here
+| Path | What |
+|---|---|
+| `server.py` | FastAPI backend: `/api/chat` (SSE streaming), `/api/image`, `/api/video`, `/api/vision`, `/api/lead`, `/api/health` |
+| `sglbot/` | AI/media/prompt logic copied from the Telegram bot (`/workspace/sgl-telegram-bot`), plus a Gemini tool-call fix and `HF_TOKEN` support |
+| `static/` | Frontend (mobile-first dark chat UI, Bengali/English, markdown, photo upload, history in localStorage, PWA manifest + service worker + icons) |
+| `android/` | Android WebView app (Gradle project). Signing key: `android/nexora-debug.keystore` (password `android`) — keep it, updates must use the same key |
+| `android-build-output/NexoraAI.apk` | Built, signed APK |
+| `Dockerfile`, `render.yaml`, `.env.example` | Deployment (Render free web service recommended) |
+| `run-server.sh` | Box supervisor (auto-restart), logs in `logs/server.log` |
+
+All API keys stay on the server (`.env` / host env vars). Rate limits per IP + daily global caps protect the free quotas.
+
+## Run locally (box)
+```
+setsid nohup ./run-server.sh >/dev/null 2>&1 < /dev/null &   # http://localhost:8090
+```
+Stop: `kill $(cat logs/server-supervisor.pid); pkill -f "uvicorn server:app"`
+
+## Deploy free on Render (no credit card)
+1. Create a free GitHub account and push this folder to a new repo (the `.gitignore` keeps `.env`, logs and data out).
+2. Sign up at https://render.com with GitHub → **New → Blueprint** → choose the repo (uses `render.yaml`, plan *free*, Docker).
+3. Set env vars when asked: `GEMINI_API_KEY` (required), `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID` (lead alerts), optional `HF_TOKEN`.
+4. You get `https://nexora-ai.onrender.com` (or similar). Free plan sleeps after 15 min idle (first visit ~1 min to wake); disk is not persistent (leads still arrive on Telegram).
+
+## Android
+* Open the APK on the phone → allow "install unknown apps" → install.
+* First launch asks for the server URL (enter the Render URL). Change it later from the menu → **⚙ Server URL**.
+* Rebuild with a baked-in URL:
+```
+export JAVA_HOME=/workspace/tools/jdk17 ANDROID_HOME=/workspace/tools/android-sdk
+cd android && ./gradlew assembleDebug -PnexoraUrl=https://YOUR-APP.onrender.com
+cp app/build/outputs/apk/debug/app-debug.apk ../android-build-output/NexoraAI.apk
+```
+
+## Telegram token on Render
+The web app never polls Telegram. `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID` are only used to *send* lead alerts (`sendMessage`), so it is safe to use the same token the Telegram bot already polls with elsewhere — no `getUpdates` conflict.

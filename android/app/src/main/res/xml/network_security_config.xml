@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- HTTPS is used for the hosted app; cleartext allowed only so a local test server (http://192.168.x.x:8090) works. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

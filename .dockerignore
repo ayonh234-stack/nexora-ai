@@ -1,0 +1,9 @@
+.venv
+.env
+logs
+data
+android
+android-build-output
+deploy
+__pycache__
+*.pyc

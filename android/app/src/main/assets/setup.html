@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nexora AI</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0b14;color:#ecebff;font-family:system-ui,"Noto Sans Bengali",sans-serif}
+  .box{width:min(92vw,420px);text-align:center;padding:24px}
+  img{width:84px;height:84px;border-radius:24px;box-shadow:0 14px 40px rgba(124,58,237,.5)}
+  h1{margin:16px 0 2px;font-size:26px;background:linear-gradient(135deg,#a78bfa,#22d3ee);-webkit-background-clip:text;color:transparent}
+  .tag{color:#9a98c3;margin:0 0 22px;font-size:14px}
+  .card{background:#161627;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:18px;text-align:left}
+  label{font-size:13px;color:#9a98c3}
+  input{width:100%;box-sizing:border-box;margin:8px 0 12px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0f0f1c;color:#fff;font-size:15px}
+  button{width:100%;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#4f46e5 55%,#06b6d4);color:#fff;font-weight:600;font-size:15px;margin-top:4px}
+  .sec{background:#1d1d33}
+  p.small{font-size:12.5px;color:#8b89b5;line-height:1.5}
+  .err{color:#fca5a5;font-size:14px;margin:0 0 12px}
+</style></head>
+<body><div class="box">
+  <img src="icon.svg" alt="Nexora AI">
+  <h1>Nexora AI</h1>
+  <p class="tag">Your AI. Your Business. Your World.</p>
+  <div class="card">
+    <p class="err" id="off" hidden>সার্ভারে সংযোগ হচ্ছে না। ইন্টারনেট দেখুন বা সার্ভার URL ঠিক আছে কিনা দেখুন।<br>Can't reach the server. Check your internet or the server URL.</p>
+    <button id="retry" hidden>আবার চেষ্টা করুন / Retry</button>
+    <label for="u">Nexora সার্ভার URL / Server URL</label>
+    <input id="u" type="url" inputmode="url" placeholder="https://nexora-ai.onrender.com" autocapitalize="off" autocomplete="off">
+    <button id="save" class="sec">সেভ করে খুলুন / Save &amp; open</button>
+    <p class="small">যে লিংকে Nexora AI ওয়েব অ্যাপ চলছে সেটা দিন। The address where the Nexora AI web app is hosted.</p>
+  </div>
+</div>
+<script>
+  var B = window.NexoraAndroid;
+  var u = document.getElementById('u');
+  try { u.value = B ? B.getUrl() : ''; } catch (e) {}
+  if (location.search.indexOf('offline=1') >= 0) { document.getElementById('off').hidden = false; document.getElementById('retry').hidden = false; }
+  document.getElementById('retry').onclick = function () { B && B.retry(); };
+  document.getElementById('save').onclick = function () { B && B.saveUrl(u.value); };
+</script>
+</body></html>

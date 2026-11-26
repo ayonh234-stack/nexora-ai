@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nexora_bg">#0B0B14</color>
+    <color name="nexora_purple">#7C3AED</color>
+    <style name="NexoraTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/nexora_bg</item>
+        <item name="android:statusBarColor">@color/nexora_bg</item>
+        <item name="android:navigationBarColor">@color/nexora_bg</item>
+        <item name="android:colorAccent">@color/nexora_purple</item>
+    </style>
+</resources>
